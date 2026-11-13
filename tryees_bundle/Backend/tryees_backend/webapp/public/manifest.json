@@ -1,0 +1,13 @@
+{
+  "name": "Treeyes Centro Operativo",
+  "short_name": "Treeyes",
+  "description": "Sistema IoT di gestione incidenti per parchi urbani",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F5F6F3",
+  "theme_color": "#5140D9",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

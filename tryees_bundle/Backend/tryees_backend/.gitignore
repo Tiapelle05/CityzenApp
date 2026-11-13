@@ -1,0 +1,51 @@
+# Ambienti virtuali
+venv/
+.venv/
+env/
+
+# Cache Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pytest_cache/
+
+# File d'ambiente (sicurezza)
+.env
+.env.*
+!.env.example
+
+# File multimediali e upload runtime (non tracciare video pesanti)
+uploads/videos/*
+!uploads/videos/.gitkeep
+uploads/mock_videos/*
+!uploads/mock_videos/.gitkeep
+uploads/snapshots/*
+!uploads/snapshots/.gitkeep
+
+
+# Editor
+.vscode/
+.idea/
+
+# Docker override locali
+docker-compose.override.yml
+
+# File temporanei / backup
+*.bak
+*.tmp
+
+# Database locali
+*.db
+*.sqlite
+*.sqlite3
+
+# Node / Frontend
+node_modules/
+dist/
+.eslintcache
+
+# ML / Gesture Model e script telecamera
+*.pkl
+gesture_model.pkl
+riconoscimento_mano_definitivo.py
+

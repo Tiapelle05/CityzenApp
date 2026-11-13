@@ -1,0 +1,115 @@
+﻿services:
+
+  # â”€â”€ Database â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  db:
+    container_name: treeyes-db-new
+
+    image: postgres:15
+
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-postgres}"
+        ]
+
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+    restart: unless-stopped
+
+
+  # â”€â”€ Broker MQTT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  mosquitto:
+    container_name: treeyes-mosquitto
+
+    image: eclipse-mosquitto:latest
+
+    ports:
+      - "1883:1883"
+
+    volumes:
+      - ./mosquitto/config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+
+    restart: unless-stopped
+
+
+  # â”€â”€ Backend FastAPI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  backend:
+    container_name: treeyes-backend
+
+    build: .
+
+    ports:
+      - "8000:8000"
+
+    environment:
+      SECRET_KEY: ${SECRET_KEY:-tryees-local-development-secret-key-change-before-deploy}
+      BASE_URL: ${BASE_URL:-http://localhost:8000}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      MQTT_BROKER_HOST: mosquitto
+      MQTT_BROKER_PORT: 1883
+      ENABLE_DOCS: ${ENABLE_DOCS:-true}
+      CITIZEN_TOKEN_EXPIRE_DAYS: 30
+      CITIZEN_REGISTER_PER_HOUR: 20
+      CITIZEN_REPORTS_PER_HOUR: 10
+
+    volumes:
+      - ./uploads:/app/uploads
+      - ./app:/app/app
+
+    depends_on:
+      db:
+        condition: service_healthy
+
+      mosquitto:
+        condition: service_started
+
+    restart: unless-stopped
+
+
+  # â”€â”€ Dashboard (build + nginx) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  dashboard:
+    container_name: treeyes-dashboard
+
+    build:
+      context: ./webapp
+      args:
+        VITE_SHOW_DEMO_USERS: ${SHOW_DEMO_USERS:-false}
+
+    ports:
+      - "5173:80"
+
+    depends_on:
+      - backend
+
+    restart: unless-stopped
+
+
+volumes:
+
+  postgres_data:
+    external: true
+    name: backend_evolved-main_postgres_data
+
+  mosquitto_data:
+
+  mosquitto_log:
