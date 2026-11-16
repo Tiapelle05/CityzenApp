@@ -6,6 +6,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'citizen_api.dart';
+import 'schermata_segnalazioni.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -212,6 +213,7 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale> {
     final pagine = [
       SchermataInizio(s: s, onSegnalazioni: () => _vaiA(1)),
       SchermataSegnalazione(s: s),
+      SchermataSegnalazioni(s: s),
       SchermataIdee(s: s),
       SchermataAvvisi(s: s),
     ];
@@ -302,6 +304,11 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale> {
             icon: const Icon(Icons.add_a_photo_outlined),
             selectedIcon: const Icon(Icons.add_a_photo_rounded, color: verdeMedio),
             label: s.t('Segnala', 'Report'),
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.list_alt_outlined),
+            selectedIcon: const Icon(Icons.list_alt_rounded, color: verdeScuro),
+            label: s.t('Elenco', 'Reports'),
           ),
           NavigationDestination(
             icon: const Icon(Icons.lightbulb_outline_rounded),
@@ -912,33 +919,34 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
   String _gravita = 'media';
   String? _errore;
 
-  static const List<_CategoriaSegnalazione> _categorie = [
+  /// Categorie usate finché il backend non risponde: gli id sono i codici del backend.
+  static const List<_CategoriaSegnalazione> _categorieBase = [
     _CategoriaSegnalazione(
-      id: 'rifiuti',
-      nomeIt: 'Rifiuti e sporcizia',
-      nomeEn: 'Waste and litter',
+      id: 'waste',
+      nomeIt: 'Cestini e rifiuti',
+      nomeEn: 'Bins and waste',
       icona: Icons.delete_outline_rounded,
       colore: verdeMedio,
       sfondo: verdePallido,
     ),
     _CategoriaSegnalazione(
-      id: 'verde',
-      nomeIt: 'Alberi e vegetazione',
-      nomeEn: 'Trees and vegetation',
+      id: 'green',
+      nomeIt: 'Verde e piante',
+      nomeEn: 'Trees and plants',
       icona: Icons.park_outlined,
       colore: verde,
       sfondo: verdeChiaro,
     ),
     _CategoriaSegnalazione(
-      id: 'strutture',
-      nomeIt: 'Panchine, giochi e strutture',
-      nomeEn: 'Benches, playgrounds and facilities',
-      icona: Icons.foundation_outlined,
+      id: 'furniture',
+      nomeIt: 'Arredi e panchine',
+      nomeEn: 'Benches and furniture',
+      icona: Icons.chair_outlined,
       colore: verdeIntermedio,
       sfondo: verdePallido,
     ),
     _CategoriaSegnalazione(
-      id: 'illuminazione',
+      id: 'lighting',
       nomeIt: 'Illuminazione',
       nomeEn: 'Lighting',
       icona: Icons.lightbulb_outline_rounded,
@@ -946,15 +954,7 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
       sfondo: verdePallido,
     ),
     _CategoriaSegnalazione(
-      id: 'sentieri',
-      nomeIt: 'Sentieri e pavimentazione',
-      nomeEn: 'Paths and paving',
-      icona: Icons.route_rounded,
-      colore: verdePrincipale,
-      sfondo: verdePallido,
-    ),
-    _CategoriaSegnalazione(
-      id: 'altro',
+      id: 'other',
       nomeIt: 'Altro',
       nomeEn: 'Other',
       icona: Icons.more_horiz_rounded,
@@ -962,6 +962,24 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
       sfondo: verdePallido,
     ),
   ];
+
+  List<_CategoriaSegnalazione> _categorie = _categorieBase;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_caricaCategorie());
+  }
+
+  Future<void> _caricaCategorie() async {
+    try {
+      final rows = await CitizenApi.instance.getCategories(kind: 'problem');
+      if (!mounted || rows.isEmpty) return;
+      setState(() => _categorie = rows.map(_CategoriaSegnalazione.fromBackend).toList());
+    } catch (_) {
+      // Backend non raggiungibile: restano le categorie di base.
+    }
+  }
 
   @override
   void dispose() {
@@ -1050,12 +1068,10 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
     }
     setState(() { _invioInCorso = true; _errore = null; });
     try {
-      const categorieBackend = {
-        'rifiuti': 'waste', 'verde': 'green', 'strutture': 'furniture',
-        'illuminazione': 'lighting', 'sentieri': 'other', 'altro': 'other',
-      };
-      final categoria = categorieBackend[_categoria] ?? 'other';
-      final nomeCategoria = _categorie.firstWhere((c) => c.id == _categoria).nomeIt;
+      final categoria = _categoria ?? 'other';
+      final nomeCategoria = _categorie
+          .firstWhere((c) => c.id == categoria, orElse: () => _categorieBase.last)
+          .nomeIt;
       final descrizione = _descrizione.text.trim().length >= 10
           ? _descrizione.text.trim()
           : 'Problema segnalato: $nomeCategoria';
@@ -1331,8 +1347,8 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
               Expanded(
                 child: Text(
                   s.t(
-                    'La segnalazione è anonima. La posizione GPS è necessaria per inviarla; la fotografia è facoltativa.',
-                    'The report is anonymous. GPS location is required to submit it; a photo is optional.',
+                    'La segnalazione è anonima. Testo, foto e stato saranno visibili agli altri utenti dell’app (la posizione no): non scrivere dati personali e non fotografare persone. La posizione GPS è necessaria per inviarla; la fotografia è facoltativa.',
+                    'The report is anonymous. Its text, photo and status will be visible to other app users (its location will not): do not include personal data or photograph people. GPS location is required to submit it; a photo is optional.',
                   ),
                   style: const TextStyle(
                     fontSize: 14,
@@ -1471,7 +1487,7 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
               const SizedBox(height: 8),
               Text(_foto!.name, style: const TextStyle(fontSize: 13, color: testoSecondario)),
             ] else
-              Text(s.t('Nessuna fotografia selezionata. La foto è facoltativa.', 'No photo selected. A photo is optional.'), style: const TextStyle(fontSize: 14, color: testoSecondario)),
+              Text(s.t('Nessuna fotografia selezionata. La foto è facoltativa e sarà visibile agli altri utenti: inquadra solo il problema, senza persone né targhe.', 'No photo selected. A photo is optional and will be visible to other users: frame only the issue, without people or number plates.'), style: const TextStyle(fontSize: 14, color: testoSecondario)),
             const SizedBox(height: 12),
             Wrap(spacing: 8, runSpacing: 8, children: [
               OutlinedButton.icon(onPressed: () => _selezionaFoto(ImageSource.camera), icon: const Icon(Icons.camera_alt_outlined), label: Text(s.t('Fotocamera', 'Camera'))),
@@ -1536,6 +1552,7 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
   Widget _passaggioRiepilogo(Copie s) {
     final categoria = _categorie.firstWhere(
       (element) => element.id == _categoria,
+      orElse: () => _categorieBase.last,
     );
 
     return Column(
@@ -1892,26 +1909,80 @@ class _CategoriaSegnalazione {
     required this.colore,
     required this.sfondo,
   });
+
+  // Icone Material indicate dal backend (campo `icon` di /citizen/categories).
+  static const Map<String, IconData> _icone = {
+    'lightbulb': Icons.lightbulb_outline_rounded,
+    'delete': Icons.delete_outline_rounded,
+    'park': Icons.park_outlined,
+    'water_drop': Icons.water_drop_outlined,
+    'water': Icons.water_outlined,
+    'chair': Icons.chair_outlined,
+    'cleaning_services': Icons.cleaning_services_outlined,
+    'shield': Icons.shield_outlined,
+    'sports_soccer': Icons.sports_soccer_outlined,
+    'more_horiz': Icons.more_horiz_rounded,
+  };
+
+  static const Map<String, String> _nomiEn = {
+    'lighting': 'Lighting',
+    'waste': 'Bins and waste',
+    'green': 'Trees and plants',
+    'irrigation': 'Irrigation',
+    'fountains': 'Drinking fountains',
+    'furniture': 'Benches and furniture',
+    'cleaning': 'Cleaning',
+    'safety': 'Safety',
+    'play': 'Playground and sports area',
+    'other': 'Other',
+  };
+
+  static const List<Color> _colori = [verdeMedio, verde, verdeIntermedio, verdeAccento, verdePrincipale];
+
+  factory _CategoriaSegnalazione.fromBackend(Map<String, dynamic> json) {
+    final code = json['code'] as String;
+    final label = json['label'] as String? ?? code;
+    return _CategoriaSegnalazione(
+      id: code,
+      nomeIt: label,
+      nomeEn: _nomiEn[code] ?? label,
+      icona: _icone[json['icon']] ?? Icons.label_outline_rounded,
+      colore: _colori[code.codeUnits.fold<int>(0, (a, b) => a + b) % _colori.length],
+      sfondo: code == 'green' ? verdeChiaro : verdePallido,
+    );
+  }
 }
 
+/// Idea pubblicata nel parco: nel backend è una segnalazione `suggestion`.
+/// La prima riga della descrizione fa da titolo.
 class _IdeaItem {
   final int id;
+  final String code;
   final String title;
   final String description;
-  final int votes;
-  final bool votedByMe;
+  final String? categoryLabel;
+  final String status;
+  final String statusLabel;
+  final bool mine;
   final DateTime createdAt;
 
-  const _IdeaItem({required this.id, required this.title, required this.description, required this.votes, required this.votedByMe, required this.createdAt});
+  const _IdeaItem({required this.id, required this.code, required this.title, required this.description, required this.categoryLabel, required this.status, required this.statusLabel, required this.mine, required this.createdAt});
 
-  factory _IdeaItem.fromJson(Map<String, dynamic> json) => _IdeaItem(
-    id: json['id'] as int,
-    title: json['title'] as String? ?? '',
-    description: json['description'] as String? ?? '',
-    votes: json['vote_count'] as int? ?? 0,
-    votedByMe: json['voted_by_me'] as bool? ?? false,
-    createdAt: DateTime.tryParse(json['created_at']?.toString() ?? '')?.toLocal() ?? DateTime.now(),
-  );
+  factory _IdeaItem.fromJson(Map<String, dynamic> json) {
+    final text = (json['description'] as String? ?? '').trim();
+    final newline = text.indexOf('\n');
+    return _IdeaItem(
+      id: json['id'] as int,
+      code: json['code'] as String? ?? '',
+      title: newline < 0 ? text : text.substring(0, newline).trim(),
+      description: newline < 0 ? '' : text.substring(newline + 1).trim(),
+      categoryLabel: json['category_label'] as String?,
+      status: json['status'] as String? ?? 'received',
+      statusLabel: json['status_label'] as String? ?? '',
+      mine: json['is_mine'] == true,
+      createdAt: DateTime.tryParse(json['created_at']?.toString() ?? '')?.toLocal() ?? DateTime.now(),
+    );
+  }
 
   String get dateLabel => '${createdAt.day.toString().padLeft(2, '0')}/${createdAt.month.toString().padLeft(2, '0')}';
 }
@@ -1924,13 +1995,16 @@ class SchermataIdee extends StatefulWidget {
 }
 
 class _SchermataIdeeState extends State<SchermataIdee> {
-  String _filtroIdee = 'recenti';
-  bool _ideaPrivata = false;
+  static const Map<String, dynamic> _categoriaPredefinita = {'code': 'other', 'label': 'Altro'};
+
   bool _caricamento = true;
   bool _invio = false;
   String? _errore;
-  int? _operazioneIdea;
   List<_IdeaItem> _idee = [];
+  List<Map<String, dynamic>> _categorie = const [_categoriaPredefinita];
+  String _categoria = 'other';
+  StreamSubscription<Map<String, dynamic>>? _live;
+  Timer? _debounce;
   final TextEditingController _titolo = TextEditingController();
   final TextEditingController _dettagli = TextEditingController();
 
@@ -1938,41 +2012,50 @@ class _SchermataIdeeState extends State<SchermataIdee> {
   void initState() {
     super.initState();
     unawaited(_caricaIdee());
+    unawaited(_caricaCategorie());
+    CitizenApi.instance.connectLive();
+    _live = CitizenApi.instance.events.listen((e) {
+      final type = e['type'];
+      final data = e['data'];
+      final suggerimento = data is Map && data['kind'] == 'suggestion';
+      if ((type == 'report_created' && suggerimento) || type == 'report_status_changed') {
+        _debounce?.cancel();
+        _debounce = Timer(const Duration(milliseconds: 400), () => _caricaIdee(silenzioso: true));
+      }
+    });
   }
 
   @override
   void dispose() {
+    _live?.cancel();
+    _debounce?.cancel();
     _titolo.dispose();
     _dettagli.dispose();
     super.dispose();
   }
 
-  Future<void> _caricaIdee() async {
-    if (mounted) setState(() { _caricamento = true; _errore = null; });
+  Future<void> _caricaCategorie() async {
     try {
-      final result = await CitizenApi.instance.getIdeas(sort: _filtroIdee == 'votate' ? 'votes' : 'recent');
+      final rows = await CitizenApi.instance.getCategories(kind: 'suggestion');
+      if (mounted && rows.isNotEmpty) setState(() => _categorie = rows);
+    } catch (_) {
+      // Resta "Altro", accettata dal backend anche per i suggerimenti.
+    }
+  }
+
+  Future<void> _caricaIdee({bool silenzioso = false}) async {
+    if (!silenzioso && mounted) setState(() { _caricamento = true; _errore = null; });
+    try {
+      final result = await CitizenApi.instance.getFeed(kind: 'suggestion', limit: 50);
       final rows = (result['items'] as List? ?? []).cast<Map<String, dynamic>>();
-      if (mounted) setState(() { _idee = rows.map(_IdeaItem.fromJson).toList(); _caricamento = false; });
+      if (mounted) setState(() { _idee = rows.map(_IdeaItem.fromJson).toList(); _caricamento = false; _errore = null; });
     } catch (e) {
       if (mounted) setState(() { _errore = e.toString(); _caricamento = false; });
     }
   }
 
-  Future<void> _toggleVote(_IdeaItem idea) async {
-    setState(() => _operazioneIdea = idea.id);
-    try {
-      if (idea.votedByMe) {
-        await CitizenApi.instance.removeIdeaVote(idea.id);
-      } else {
-        await CitizenApi.instance.voteIdea(idea.id);
-      }
-      await _caricaIdee();
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
-    } finally {
-      if (mounted) setState(() => _operazioneIdea = null);
-    }
-  }
+  String _nomeCategoria(String code) =>
+      (_categorie.firstWhere((c) => c['code'] == code, orElse: () => _categoriaPredefinita)['label'] ?? code).toString();
 
   Future<void> _mostraAnteprima(Copie s) async {
     final titolo = _titolo.text.trim();
@@ -1992,7 +2075,9 @@ class _SchermataIdeeState extends State<SchermataIdee> {
           Text(s.t('Dettagli', 'Details'), style: const TextStyle(fontWeight: FontWeight.w800)),
           const SizedBox(height: 4), Text(dettagli),
           const SizedBox(height: 12),
-          Text(s.t('Visibilità: ', 'Visibility: ') + (_ideaPrivata ? s.t('Privata', 'Private') : s.t('Pubblica', 'Public')), style: const TextStyle(fontWeight: FontWeight.w700)),
+          Text('${s.t('Argomento', 'Topic')}: ${_nomeCategoria(_categoria)}', style: const TextStyle(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 8),
+          Text(s.t('Sarà visibile a tutti gli utenti dell’app.', 'It will be visible to all app users.'), style: const TextStyle(color: testoSecondario)),
         ])),
         actions: [
           TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: Text(s.t('Modifica', 'Edit'))),
@@ -2011,13 +2096,14 @@ class _SchermataIdeeState extends State<SchermataIdee> {
     }
     setState(() { _invio = true; });
     try {
-      await CitizenApi.instance.createIdea(title: titolo, description: dettagli, isPrivate: _ideaPrivata);
+      // Il backend non ha un titolo: va nella prima riga della descrizione (max 1000 caratteri).
+      await CitizenApi.instance.createSuggestion(category: _categoria, description: '$titolo\n$dettagli');
       _titolo.clear();
       _dettagli.clear();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_ideaPrivata ? s.t('Idea inviata ai gestori del parco.', 'Idea sent to park managers.') : s.t('Idea pubblicata.', 'Idea published.'))));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.t('Idea pubblicata.', 'Idea published.'))));
       }
-      await _caricaIdee();
+      await _caricaIdee(silenzioso: true);
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
     } finally {
@@ -2026,8 +2112,6 @@ class _SchermataIdeeState extends State<SchermataIdee> {
   }
 
   Widget _schedaIdea(_IdeaItem idea, Copie s) {
-    final votata = idea.votedByMe;
-    final busy = _operazioneIdea == idea.id;
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Scheda(
@@ -2038,18 +2122,18 @@ class _SchermataIdeeState extends State<SchermataIdee> {
             const SizedBox(width: 11),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(idea.title, style: const TextStyle(fontSize: 16, height: 1.3, fontWeight: FontWeight.w800, color: testo)),
-              const SizedBox(height: 5),
-              Text(idea.description, style: const TextStyle(fontSize: 14, height: 1.4, color: testoSecondario)),
+              if (idea.description.isNotEmpty) ...[
+                const SizedBox(height: 5),
+                Text(idea.description, style: const TextStyle(fontSize: 14, height: 1.4, color: testoSecondario)),
+              ],
             ])),
           ]),
           const SizedBox(height: 10),
           Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, runSpacing: 8, children: [
-            Text(idea.dateLabel, style: const TextStyle(fontSize: 13, color: testoSecondario)),
-            Wrap(crossAxisAlignment: WrapCrossAlignment.center, alignment: WrapAlignment.end, spacing: 8, runSpacing: 6, children: [
-              Text('${idea.votes} ${s.t('voti', 'votes')}', style: TextStyle(fontWeight: FontWeight.w800, color: votata ? verde : testoSecondario)),
-              votata
-                ? FilledButton.tonalIcon(onPressed: busy ? null : () => _toggleVote(idea), icon: busy ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.thumb_up_rounded, size: 18), label: Text(s.t('Rimuovi', 'Remove')), style: FilledButton.styleFrom(minimumSize: const Size(0, 44), foregroundColor: verde, backgroundColor: verdeChiaro, padding: const EdgeInsets.symmetric(horizontal: 12)))
-                : OutlinedButton.icon(onPressed: busy ? null : () => _toggleVote(idea), icon: busy ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.thumb_up_outlined, size: 18), label: Text(s.t('Mi piace', 'Upvote')), style: OutlinedButton.styleFrom(minimumSize: const Size(0, 44), foregroundColor: verde, side: const BorderSide(color: verde), padding: const EdgeInsets.symmetric(horizontal: 12))),
+            Text([idea.dateLabel, if (idea.categoryLabel != null) idea.categoryLabel!].join(' · '), style: const TextStyle(fontSize: 13, color: testoSecondario)),
+            Wrap(crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, children: [
+              if (idea.mine) Text(s.t('La tua idea', 'Your idea'), style: const TextStyle(fontSize: 13, color: verde, fontWeight: FontWeight.w800)),
+              Text(idea.statusLabel, style: const TextStyle(fontSize: 13, color: testoSecondario, fontWeight: FontWeight.w700)),
             ]),
           ]),
         ]),
@@ -2060,44 +2144,42 @@ class _SchermataIdeeState extends State<SchermataIdee> {
   @override
   Widget build(BuildContext context) {
     final s = widget.s;
-    return ContenitorePagina(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      TitoloPagina(titolo: s.t('Idee per il parco', 'Ideas for the park'), descrizione: s.t('Proponi un miglioramento e scegli se renderlo visibile a tutti.', 'Suggest an improvement and choose whether it is visible to everyone.'), colore: verdeAccento),
-      const SizedBox(height: 4),
-      Container(padding: const EdgeInsets.all(17), decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFF244B35), Color(0xFF527A50)], begin: Alignment.topLeft, end: Alignment.bottomRight), borderRadius: BorderRadius.circular(18), boxShadow: const [BoxShadow(color: Color(0x1A17271D), blurRadius: 16, offset: Offset(0, 5))]), child: Row(children: [const Icon(Icons.lightbulb_rounded, color: Colors.white, size: 34), const SizedBox(width: 13), Expanded(child: Text(s.t('Ogni idea può far crescere qualcosa di bello.', 'Every idea can help something good grow.'), style: const TextStyle(fontSize: 15, height: 1.35, color: Colors.white, fontWeight: FontWeight.w700)))])),
-      const SizedBox(height: 18),
-      Scheda(padding: const EdgeInsets.all(16), colore: const Color(0xFFFFFDF7), coloreBordo: const Color(0xFF9BAA8D), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(s.t('La tua idea', 'Your idea'), style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: testo)),
+    return RefreshIndicator(
+      onRefresh: () => _caricaIdee(silenzioso: true),
+      child: ContenitorePagina(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        TitoloPagina(titolo: s.t('Idee per il parco', 'Ideas for the park'), descrizione: s.t('Proponi un miglioramento e guarda cosa propongono gli altri.', 'Suggest an improvement and see what others suggest.'), colore: verdeAccento),
         const SizedBox(height: 4),
-        Text(s.t('Ogni proposta è benvenuta: raccontaci cosa migliorerebbe il parco.', 'Every suggestion is welcome: tell us what could make the park better.'), style: const TextStyle(fontSize: 14, height: 1.4, color: testoSecondario)),
-        const SizedBox(height: 14),
-        TextField(controller: _titolo, textCapitalization: TextCapitalization.sentences, maxLength: 120, decoration: InputDecoration(labelText: s.t('Titolo', 'Title'), hintText: s.t('Es. Più ombra vicino all’area giochi', 'E.g. More shade near the playground'))),
-        const SizedBox(height: 12),
-        TextField(controller: _dettagli, minLines: 3, maxLines: 4, maxLength: 1000, textCapitalization: TextCapitalization.sentences, decoration: InputDecoration(labelText: s.t('Descrizione', 'Description'), hintText: s.t('Descrivi la tua idea in poche parole…', 'Describe your idea in a few words…'), alignLabelWithHint: true)),
-        const SizedBox(height: 16),
-        Text(s.t('Chi può vedere questa idea?', 'Who can see this idea?'), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: testo)),
-        const SizedBox(height: 8),
-        SegmentedButton<bool>(segments: [ButtonSegment<bool>(value: false, icon: const Icon(Icons.public_rounded), label: Text(s.t('Pubblica', 'Public'))), ButtonSegment<bool>(value: true, icon: const Icon(Icons.lock_outline_rounded), label: Text(s.t('Privata', 'Private')))], selected: {_ideaPrivata}, showSelectedIcon: false, onSelectionChanged: (valori) => setState(() => _ideaPrivata = valori.first)),
-        const SizedBox(height: 8),
-        Text(s.t('Pubblica: visibile alla comunità. Privata: destinata ai gestori del parco.', 'Public: visible to the community. Private: intended for park managers.'), style: const TextStyle(fontSize: 13, height: 1.4, color: testoSecondario)),
-        const SizedBox(height: 14),
-        PulsanteAzione(testo: _invio ? s.t('Invio in corso...', 'Submitting...') : s.t('Rivedi e invia', 'Review and submit'), icona: Icons.preview_rounded, colore: verdeScuro, onPressed: _invio ? null : () => _mostraAnteprima(s)),
+        Container(padding: const EdgeInsets.all(17), decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFF244B35), Color(0xFF527A50)], begin: Alignment.topLeft, end: Alignment.bottomRight), borderRadius: BorderRadius.circular(18), boxShadow: const [BoxShadow(color: Color(0x1A17271D), blurRadius: 16, offset: Offset(0, 5))]), child: Row(children: [const Icon(Icons.lightbulb_rounded, color: Colors.white, size: 34), const SizedBox(width: 13), Expanded(child: Text(s.t('Ogni idea può far crescere qualcosa di bello.', 'Every idea can help something good grow.'), style: const TextStyle(fontSize: 15, height: 1.35, color: Colors.white, fontWeight: FontWeight.w700)))])),
+        const SizedBox(height: 18),
+        Scheda(padding: const EdgeInsets.all(16), colore: const Color(0xFFFFFDF7), coloreBordo: const Color(0xFF9BAA8D), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(s.t('La tua idea', 'Your idea'), style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: testo)),
+          const SizedBox(height: 4),
+          Text(s.t('Ogni proposta è benvenuta: raccontaci cosa migliorerebbe il parco.', 'Every suggestion is welcome: tell us what could make the park better.'), style: const TextStyle(fontSize: 14, height: 1.4, color: testoSecondario)),
+          const SizedBox(height: 14),
+          TextField(controller: _titolo, textCapitalization: TextCapitalization.sentences, maxLength: 120, decoration: InputDecoration(labelText: s.t('Titolo', 'Title'), hintText: s.t('Es. Più ombra vicino all’area giochi', 'E.g. More shade near the playground'))),
+          const SizedBox(height: 12),
+          TextField(controller: _dettagli, minLines: 3, maxLines: 4, maxLength: 870, textCapitalization: TextCapitalization.sentences, decoration: InputDecoration(labelText: s.t('Descrizione', 'Description'), hintText: s.t('Descrivi la tua idea in poche parole…', 'Describe your idea in a few words…'), helperText: s.t('Non inserire dati personali.', 'Do not include personal information.'), alignLabelWithHint: true)),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            initialValue: _categorie.any((c) => c['code'] == _categoria) ? _categoria : null,
+            decoration: InputDecoration(labelText: s.t('Argomento', 'Topic')),
+            items: [for (final c in _categorie) DropdownMenuItem(value: c['code'] as String, child: Text((c['label'] ?? c['code']).toString()))],
+            onChanged: (v) { if (v != null) setState(() => _categoria = v); },
+          ),
+          const SizedBox(height: 8),
+          Text(s.t('Le idee sono pubbliche: le vedono tutti gli utenti dell’app e i gestori del parco.', 'Ideas are public: all app users and park managers can see them.'), style: const TextStyle(fontSize: 13, height: 1.4, color: testoSecondario)),
+          const SizedBox(height: 14),
+          PulsanteAzione(testo: _invio ? s.t('Invio in corso...', 'Submitting...') : s.t('Rivedi e invia', 'Review and submit'), icona: Icons.preview_rounded, colore: verdeScuro, onPressed: _invio ? null : () => _mostraAnteprima(s)),
+        ])),
+        const SizedBox(height: 22),
+        Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, runSpacing: 4, children: [Text(s.t('Idee della comunità', 'Community ideas'), style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: testo)), Text('${_idee.length} ${s.t('idee', 'ideas')}', style: const TextStyle(fontSize: 13, color: testoSecondario, fontWeight: FontWeight.w700))]),
+        const SizedBox(height: 10),
+        if (_caricamento) const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()))
+        else if (_errore != null) Scheda(child: Column(children: [Text(_errore!, style: const TextStyle(color: testoSecondario)), TextButton(onPressed: _caricaIdee, child: Text(s.t('Riprova', 'Retry')))]))
+        else if (_idee.isEmpty) Scheda(child: Text(s.t('Non ci sono ancora idee. Puoi essere il primo a proporne una.', 'There are no ideas yet. You can be the first to suggest one.'), style: const TextStyle(fontSize: 14, color: testoSecondario)))
+        else ..._idee.map((idea) => _schedaIdea(idea, s)),
       ])),
-      const SizedBox(height: 22),
-      Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, runSpacing: 4, children: [Text(s.t('Idee della comunità', 'Community ideas'), style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: testo)), Text('${_idee.length} ${s.t('idee', 'ideas')}', style: const TextStyle(fontSize: 13, color: testoSecondario, fontWeight: FontWeight.w700))]),
-      const SizedBox(height: 5),
-      Text(s.t('Esprimi il tuo interesse con un voto.', 'Show your support with an upvote.'), style: const TextStyle(fontSize: 14, color: testoSecondario)),
-      const SizedBox(height: 10),
-      Wrap(spacing: 8, children: [
-        ChoiceChip(label: Text(s.t('Più recenti', 'Most recent')), selected: _filtroIdee == 'recenti', selectedColor: verdeChiaro, onSelected: (_) { setState(() => _filtroIdee = 'recenti'); unawaited(_caricaIdee()); }),
-        ChoiceChip(label: Text(s.t('Più votate', 'Most voted')), selected: _filtroIdee == 'votate', selectedColor: verdeChiaro, onSelected: (_) { setState(() => _filtroIdee = 'votate'); unawaited(_caricaIdee()); }),
-      ]),
-      const SizedBox(height: 8),
-      if (_caricamento) const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()))
-      else if (_errore != null) Scheda(child: Column(children: [Text(_errore!, style: const TextStyle(color: testoSecondario)), TextButton(onPressed: _caricaIdee, child: Text(s.t('Riprova', 'Retry')))]))
-      else if (_idee.isEmpty) Scheda(child: Text(s.t('Non ci sono ancora idee pubbliche. Puoi essere il primo a proporne una.', 'There are no public ideas yet. You can be the first to suggest one.'), style: const TextStyle(fontSize: 14, color: testoSecondario)))
-      else ..._idee.map((idea) => _schedaIdea(idea, s)),
-      Padding(padding: const EdgeInsets.only(top: 2), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [const Icon(Icons.info_outline_rounded, size: 18, color: verde), const SizedBox(width: 8), Expanded(child: Text(s.t('I voti indicano l’interesse della comunità, non garantiscono che un’idea venga realizzata.', 'Votes show community interest; they do not guarantee an idea will be implemented.'), style: const TextStyle(fontSize: 13, height: 1.4, color: testoSecondario)))])),
-    ]));
+    );
   }
 }
 

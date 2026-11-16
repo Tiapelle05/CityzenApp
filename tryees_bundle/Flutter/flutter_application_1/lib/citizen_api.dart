@@ -1,10 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
 
 /// Client REST per le API cittadino di Tryees.
 /// L'URL può essere sovrascritto con --dart-define=API_BASE_URL=... .
@@ -59,10 +60,21 @@ class CitizenApi {
       await refreshParks();
       try { await getParkStatus(); } catch (_) {}
       initializationError = null;
+      // Se una schermata aveva chiesto gli aggiornamenti live prima che ci fosse il token
+      if (_wsWanted) connectLive();
     } catch (e) {
       initializationError = _cleanError(e);
       rethrow;
     }
+  }
+
+  /// Nuova registrazione con lo stesso install_id (stesso cittadino, nuovo token).
+  /// Usata quando il backend risponde 401 (token scaduto o chiave cambiata).
+  Future<void> _reRegister() async {
+    final prefs = await SharedPreferences.getInstance();
+    final installId = prefs.getString(_installIdKey) ?? _uuid.v4();
+    await prefs.setString(_installIdKey, installId);
+    await _register(installId);
   }
 
   Future<void> _ensureReady() async {
@@ -126,42 +138,29 @@ class CitizenApi {
         .cast<Map<String, dynamic>>();
   }
 
-  Future<List<Map<String, dynamic>>> getCategories() async =>
-      ((await _get('/citizen/categories')) as List).cast<Map<String, dynamic>>();
-
-  Future<Map<String, dynamic>> getIdeas({String sort = 'recent'}) async {
-    if (testMode) return {'items': <Map<String, dynamic>>[], 'total': 0};
+  /// Categorie attive; con [kind] solo quelle usabili per quel tipo (problem, suggestion).
+  Future<List<Map<String, dynamic>>> getCategories({String? kind}) async {
+    if (testMode) return [];
     await _ensureReady();
-    final id = _requirePark();
-    return (await _get('/citizen/ideas?park_id=$id&sort=$sort&skip=0&limit=50'))
-        as Map<String, dynamic>;
+    final rows = ((await _get('/citizen/categories')) as List).cast<Map<String, dynamic>>();
+    if (kind == null) return rows;
+    return rows.where((c) => (c['kinds'] as List? ?? const []).contains(kind)).toList();
   }
 
-  Future<Map<String, dynamic>> createIdea({
-    required String title,
+  /// Idea per il parco: nel backend è una segnalazione `suggestion`, pubblica nel feed.
+  /// Non serve la posizione.
+  Future<Map<String, dynamic>> createSuggestion({
+    required String category,
     required String description,
-    required bool isPrivate,
   }) async {
     await _ensureReady();
     final id = _requirePark();
-    return (await _postJson('/citizen/ideas', {
-      'park_id': id,
-      'title': title,
+    return _sendReport({
+      'kind': 'suggestion',
+      'park_id': '$id',
       'description': description,
-      'visibility': isPrivate ? 'private' : 'public',
-      'client_ref': _uuid.v4(),
-    })) as Map<String, dynamic>;
-  }
-
-  Future<Map<String, dynamic>> voteIdea(int ideaId) async {
-    await _ensureReady();
-    return (await _postJson('/citizen/ideas/$ideaId/vote', const {}))
-          as Map<String, dynamic>;
-  }
-
-  Future<Map<String, dynamic>> removeIdeaVote(int ideaId) async {
-    await _ensureReady();
-    return (await _delete('/citizen/ideas/$ideaId/vote')) as Map<String, dynamic>;
+      'category': category,
+    });
   }
 
   Future<Map<String, dynamic>> createProblemReport({
@@ -175,52 +174,165 @@ class CitizenApi {
   }) async {
     await _ensureReady();
     final id = _requirePark();
-    final request = http.MultipartRequest('POST', _uri('/citizen/reports'));
-    request.headers['Authorization'] = 'Bearer ${_requireToken()}';
-    request.fields.addAll({
+    return _sendReport({
       'kind': 'problem',
       'park_id': '$id',
       'description': description,
-      'client_ref': _uuid.v4(),
       'category': category,
       'priority': priority,
       'lat': '$latitude',
       'lon': '$longitude',
-    });
-    if (photoBytes != null && photoBytes.isNotEmpty) {
-      request.files.add(http.MultipartFile.fromBytes(
-        'photo',
-        photoBytes,
-        filename: photoName ?? 'segnalazione.jpg',
-      ));
+    }, photoBytes: photoBytes, photoName: photoName);
+  }
+
+  /// POST /citizen/reports (sempre multipart, anche senza foto).
+  Future<Map<String, dynamic>> _sendReport(Map<String, String> fields,
+      {Uint8List? photoBytes, String? photoName}) async {
+    // client_ref creato una volta sola: un reinvio (anche dopo il 401) non crea doppioni.
+    final clientRef = _uuid.v4();
+    Future<http.Response> send() async {
+      final request = http.MultipartRequest('POST', _uri('/citizen/reports'));
+      request.headers['Authorization'] = 'Bearer ${_requireToken()}';
+      request.fields.addAll({...fields, 'client_ref': clientRef});
+      if (photoBytes != null && photoBytes.isNotEmpty) {
+        request.files.add(http.MultipartFile.fromBytes(
+          'photo',
+          photoBytes,
+          filename: photoName ?? 'segnalazione.jpg',
+        ));
+      }
+      final streamed = await request.send().timeout(const Duration(seconds: 45));
+      return http.Response.fromStream(streamed);
     }
-    final streamed = await request.send().timeout(const Duration(seconds: 45));
-    final response = await http.Response.fromStream(streamed);
+
+    var response = await send();
+    if (response.statusCode == 401) {
+      await _reRegister();
+      response = await send();
+    }
     return _decode(response) as Map<String, dynamic>;
   }
 
-  Future<dynamic> _get(String path) => _request('GET', path);
-  Future<dynamic> _delete(String path) => _request('DELETE', path);
+  /// Segnalazioni dell'utente (dalla più recente).
+  Future<Map<String, dynamic>> getMyReports({int skip = 0, int limit = 20}) async {
+    if (testMode) return {'items': <Map<String, dynamic>>[], 'total': 0};
+    await _ensureReady();
+    return (await _get('/citizen/reports?skip=$skip&limit=$limit')) as Map<String, dynamic>;
+  }
 
-  Future<dynamic> _postJson(String path, Map<String, dynamic> body) =>
-      _request('POST', path, body: body);
+  Future<Map<String, dynamic>> getReport(int id) async {
+    await _ensureReady();
+    return (await _get('/citizen/reports/$id')) as Map<String, dynamic>;
+  }
+
+  /// Segnalazioni di tutti i cittadini del parco (GET /citizen/feed).
+  Future<Map<String, dynamic>> getFeed({String? kind, int skip = 0, int limit = 20}) async {
+    if (testMode) return {'items': <Map<String, dynamic>>[], 'total': 0};
+    await _ensureReady();
+    final id = _requirePark();
+    final q = 'park_id=$id&skip=$skip&limit=$limit${kind == null ? '' : '&kind=$kind'}';
+    return (await _get('/citizen/feed?$q')) as Map<String, dynamic>;
+  }
+
+  /// URL assoluto di una foto restituita dal backend (`photo_url` è relativo).
+  String? absoluteUrl(String? path) {
+    if (path == null || path.isEmpty) return null;
+    if (path.startsWith('http')) return path;
+    return '$baseUrl${path.startsWith('/') ? '' : '/'}$path';
+  }
+
+  // --- Aggiornamenti live (WS /citizen/ws) ---------------------------------
+  final StreamController<Map<String, dynamic>> _events = StreamController.broadcast();
+  Stream<Map<String, dynamic>> get events => _events.stream;
+  WebSocketChannel? _ws;
+  Timer? _wsPing;
+  Timer? _wsRetry;
+  int _wsBackoff = 2;
+  bool _wsWanted = false;
+
+  /// Apre il WebSocket (idempotente). Messaggi: {type, data} con type
+  /// report_created | report_status_changed | report_updated | notice_created |
+  /// park_status_changed. Si inoltrano solo quelli del parco in uso (o senza park_id).
+  /// Se il token non c'è ancora, si connette appena initialize() riesce.
+  void connectLive() {
+    if (testMode) return;
+    _wsWanted = true;
+    if (_ws != null || _token == null) return;
+    final wsBase = baseUrl.replaceFirst(RegExp(r'^http'), 'ws');
+    final channel = WebSocketChannel.connect(
+        Uri.parse('$wsBase/citizen/ws?token=${Uri.encodeQueryComponent(_token!)}'));
+    _ws = channel;
+    _wsPing = Timer.periodic(const Duration(seconds: 25), (_) {
+      try { channel.sink.add('ping'); } catch (_) {}
+    });
+    channel.stream.listen(
+      (message) {
+        _wsBackoff = 2;
+        try {
+          final data = jsonDecode(message as String);
+          if (data is! Map<String, dynamic>) return;
+          final payload = data['data'];
+          final park = payload is Map ? payload['park_id'] : null;
+          if (park == null || park == _parkId) _events.add(data);
+        } catch (_) {}
+      },
+      onError: (_) => _wsClosed(channel, null),
+      onDone: () => _wsClosed(channel, channel.closeCode),
+    );
+  }
+
+  void _wsClosed(WebSocketChannel channel, int? code) {
+    if (!identical(_ws, channel)) return;
+    _wsPing?.cancel();
+    _ws = null;
+    if (!_wsWanted) return;
+    _wsRetry?.cancel();
+    _wsRetry = Timer(Duration(seconds: _wsBackoff), () async {
+      if (code == 1008) {
+        // token non valido: nuova registrazione prima di riconnettersi
+        try { await _reRegister(); } catch (_) {}
+      }
+      connectLive();
+    });
+    _wsBackoff = (_wsBackoff * 2).clamp(2, 60);
+  }
+
+  void disconnectLive() {
+    _wsWanted = false;
+    _wsPing?.cancel();
+    _wsRetry?.cancel();
+    final ws = _ws;
+    _ws = null;
+    ws?.sink.close();
+  }
+
+  Future<dynamic> _get(String path) => _request('GET', path);
 
   Future<dynamic> _request(String method, String path,
       {Map<String, dynamic>? body}) async {
     if (_token == null) await initialize();
-    final headers = <String, String>{'Authorization': 'Bearer ${_requireToken()}'};
-    if (body != null) headers['Content-Type'] = 'application/json';
-    late http.Response response;
-    final uri = _uri(path);
-    if (method == 'GET') {
-      response = await http.get(uri, headers: headers).timeout(const Duration(seconds: 20));
-    } else if (method == 'POST') {
-      response = await http.post(uri, headers: headers, body: jsonEncode(body ?? {}))
-          .timeout(const Duration(seconds: 20));
-    } else {
-      response = await http.delete(uri, headers: headers).timeout(const Duration(seconds: 20));
+    var response = await _send(method, path, body);
+    if (response.statusCode == 401) {
+      // token scaduto o non valido: nuova registrazione e un solo nuovo tentativo
+      await _reRegister();
+      response = await _send(method, path, body);
     }
     return _decode(response);
+  }
+
+  Future<http.Response> _send(String method, String path, Map<String, dynamic>? body) {
+    final headers = <String, String>{'Authorization': 'Bearer ${_requireToken()}'};
+    if (body != null) headers['Content-Type'] = 'application/json';
+    final uri = _uri(path);
+    const t = Duration(seconds: 20);
+    switch (method) {
+      case 'GET':
+        return http.get(uri, headers: headers).timeout(t);
+      case 'POST':
+        return http.post(uri, headers: headers, body: jsonEncode(body ?? {})).timeout(t);
+      default:
+        return http.delete(uri, headers: headers).timeout(t);
+    }
   }
 
   dynamic _decode(http.Response response) {
@@ -234,9 +346,23 @@ class CitizenApi {
       var message = 'Errore server (${response.statusCode})';
       if (data is Map && data['detail'] != null) {
         final detail = data['detail'];
-        message = detail is String ? detail : detail.toString();
+        if (detail is String) {
+          message = detail;
+        } else if (detail is List && detail.isNotEmpty && detail.first is Map) {
+          message = (detail.first['msg'] ?? detail.first).toString();
+        } else {
+          message = detail.toString();
+        }
+      } else if (response.statusCode == 403) {
+        message = 'Questa installazione è stata bloccata.';
       }
-      throw ApiException(message);
+      if (response.statusCode == 429) {
+        final wait = int.tryParse(response.headers['retry-after'] ?? '');
+        if (wait != null) {
+          message = '$message (riprova tra ${(wait / 60).ceil()} min)';
+        }
+      }
+      throw ApiException(message, statusCode: response.statusCode);
     }
     return data;
   }
@@ -256,7 +382,8 @@ class CitizenApi {
 
 class ApiException implements Exception {
   final String message;
-  const ApiException(this.message);
+  final int? statusCode;
+  const ApiException(this.message, {this.statusCode});
   @override
   String toString() => message;
 }

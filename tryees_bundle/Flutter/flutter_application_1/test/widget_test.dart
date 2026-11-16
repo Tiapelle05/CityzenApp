@@ -4,7 +4,7 @@ import 'package:flutter_application_1/citizen_api.dart';
 import 'package:flutter_application_1/main.dart';
 
 void main() {
-  testWidgets('Tryees carica le quattro sezioni principali', (tester) async {
+  testWidgets('Tryees carica le cinque sezioni principali', (tester) async {
     CitizenApi.instance.testMode = true;
     addTearDown(() => CitizenApi.instance.testMode = false);
 
@@ -15,6 +15,7 @@ void main() {
     expect(find.byType(NavigationBar), findsOneWidget);
     expect(find.text('Inizio'), findsOneWidget);
     expect(find.text('Segnala'), findsOneWidget);
+    expect(find.text('Elenco'), findsOneWidget);
     expect(find.text('Idee'), findsOneWidget);
     expect(find.text('Avvisi'), findsOneWidget);
     expect(find.text('Esplora il parco'), findsOneWidget);
