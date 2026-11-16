@@ -163,6 +163,8 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
   int _pagina = 0;
   /// Cresce a ogni segnalazione inviata: la mappa si ricarica.
   int _invii = 0;
+  /// Cresce a ogni apertura della scheda Avvisi: la lista si ricarica.
+  int _apertureAvvisi = 0;
   late final AnimationController _transizione = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 320),
@@ -181,6 +183,7 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
       if (!MediaQuery.of(context).disableAnimations) _transizione.forward(from: 0);
     }
     if (indice == 0) unawaited(_aggiornaStatoParco());
+    if (indice == 4) setState(() => _apertureAvvisi++);
   }
 
   Future<void> _aggiornaStatoParco() async {
@@ -336,7 +339,7 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
         },
       ),
       SchermataIdee(s: s),
-      SchermataAvvisi(s: s),
+      SchermataAvvisi(s: s, aperture: _apertureAvvisi),
     ];
     final curva = CurvedAnimation(parent: _transizione, curve: Curves.easeOutCubic);
 
@@ -1989,13 +1992,12 @@ class _SchermataIdeeState extends State<SchermataIdee> {
   static const Map<String, dynamic> _categoriaPredefinita = {'code': 'other', 'label': 'Altro'};
 
   bool _caricamento = true;
-  bool _invio = false;
   String? _errore;
   List<_IdeaItem> _idee = [];
   List<Map<String, dynamic>> _categorie = const [_categoriaPredefinita];
-  String _categoria = 'other';
   StreamSubscription<Map<String, dynamic>>? _live;
   Timer? _debounce;
+  // Restano qui: se l'utente chiude il pannello, la bozza non va persa.
   final TextEditingController _titolo = TextEditingController();
   final TextEditingController _dettagli = TextEditingController();
 
@@ -2045,70 +2047,18 @@ class _SchermataIdeeState extends State<SchermataIdee> {
     }
   }
 
-  String _nomeCategoria(String code) =>
-      (_categorie.firstWhere((c) => c['code'] == code, orElse: () => _categoriaPredefinita)['label'] ?? code).toString();
-
-  Future<void> _mostraAnteprima(Copie s) async {
-    final titolo = _titolo.text.trim();
-    final dettagli = _dettagli.text.trim();
-    if (titolo.length < 3 || dettagli.length < 10) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.t('Inserisci un titolo di almeno 3 caratteri e una descrizione di almeno 10.', 'Enter a title of at least 3 characters and a description of at least 10.'))));
-      return;
-    }
-    await showDialog<void>(
+  Future<void> _apriNuovaIdea() async {
+    final s = widget.s;
+    final pubblicata = await showModalBottomSheet<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        icon: const IconaTonda(Icons.lightbulb_rounded, colore: soleScuro, sfondo: soleChiaro, dimensione: 56),
-        title: Text(s.t('Anteprima del suggerimento', 'Suggestion preview')),
-        content: SingleChildScrollView(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(color: sfondo, borderRadius: BorderRadius.circular(16)),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(titolo, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, height: 1.3)),
-              const SizedBox(height: 6),
-              Text(dettagli, style: const TextStyle(color: testoSecondario, height: 1.4)),
-              const SizedBox(height: 10),
-              Etichetta('${s.t('Argomento', 'Topic')}: ${_nomeCategoria(_categoria)}', colore: soleScuro, sfondo: soleChiaro),
-            ]),
-          ),
-          const SizedBox(height: 12),
-          Row(children: [
-            const Icon(Icons.public_rounded, size: 16, color: testoSecondario),
-            const SizedBox(width: 6),
-            Expanded(child: Text(s.t('Sarà visibile a tutti gli utenti dell’app.', 'It will be visible to all app users.'), style: const TextStyle(color: testoSecondario, fontSize: 13))),
-          ]),
-        ])),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: Text(s.t('Modifica', 'Edit'))),
-          FilledButton(onPressed: _invio ? null : () { Navigator.of(dialogContext).pop(); unawaited(_inviaIdea(s)); }, child: Text(s.t('Invia idea', 'Submit idea'))),
-        ],
-      ),
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (_) => _FoglioNuovaIdea(s: s, categorie: _categorie, titolo: _titolo, dettagli: _dettagli),
     );
-  }
-
-  Future<void> _inviaIdea(Copie s) async {
-    final titolo = _titolo.text.trim();
-    final dettagli = _dettagli.text.trim();
-    if (titolo.length < 3 || dettagli.length < 10) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.t('Titolo o descrizione troppo brevi.', 'Title or description is too short.'))));
-      return;
-    }
-    setState(() { _invio = true; });
-    try {
-      // Il backend non ha un titolo: va nella prima riga della descrizione (max 1000 caratteri).
-      await CitizenApi.instance.createSuggestion(category: _categoria, description: '$titolo\n$dettagli');
-      _titolo.clear();
-      _dettagli.clear();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.t('Idea pubblicata.', 'Idea published.'))));
-      }
+    if (pubblicata == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.t('Idea pubblicata.', 'Idea published.'))));
       await _caricaIdee(silenzioso: true);
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
-    } finally {
-      if (mounted) setState(() => _invio = false);
     }
   }
 
@@ -2164,6 +2114,8 @@ class _SchermataIdeeState extends State<SchermataIdee> {
         icona: Icons.emoji_objects_outlined,
         messaggio: s.t('Non ci sono ancora idee. Puoi essere il primo a proporne una.', 'There are no ideas yet. You can be the first to suggest one.'),
         accento: Accento.giallo,
+        onAzione: _apriNuovaIdea,
+        etichettaAzione: s.t('Proponi un’idea', 'Suggest an idea'),
       );
     }
     return Column(
@@ -2186,48 +2138,16 @@ class _SchermataIdeeState extends State<SchermataIdee> {
       child: ContenitorePagina(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         TitoloPagina(
           titolo: s.t('Idee per il parco', 'Ideas for the park'),
-          descrizione: s.t('Proponi un miglioramento e guarda cosa propongono gli altri.', 'Suggest an improvement and see what others suggest.'),
+          descrizione: s.t('Guarda cosa propongono gli altri e aggiungi la tua idea.', 'See what others suggest and add your own idea.'),
           icona: Icons.lightbulb_rounded,
           accento: Accento.giallo,
         ),
-        Scheda(padding: const EdgeInsets.all(18), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const IconaTonda(Icons.edit_note_rounded, colore: soleScuro, sfondo: soleChiaro, dimensione: 44),
-            const SizedBox(width: 12),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(s.t('La tua idea', 'Your idea'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: testo)),
-              const SizedBox(height: 3),
-              Text(s.t('Ogni proposta è benvenuta: raccontaci cosa migliorerebbe il parco.', 'Every suggestion is welcome: tell us what could make the park better.'), style: const TextStyle(fontSize: 14, height: 1.4, color: testoSecondario)),
-            ])),
-          ]),
-          const SizedBox(height: 18),
-          TextField(controller: _titolo, textCapitalization: TextCapitalization.sentences, maxLength: 120, decoration: InputDecoration(labelText: s.t('Titolo', 'Title'), hintText: s.t('Es. Più ombra vicino all’area giochi', 'E.g. More shade near the playground'))),
-          const SizedBox(height: 10),
-          TextField(controller: _dettagli, minLines: 3, maxLines: 4, maxLength: 870, textCapitalization: TextCapitalization.sentences, decoration: InputDecoration(labelText: s.t('Descrizione', 'Description'), hintText: s.t('Descrivi la tua idea in poche parole…', 'Describe your idea in a few words…'), helperText: s.t('Non inserire dati personali.', 'Do not include personal information.'), alignLabelWithHint: true)),
-          const SizedBox(height: 14),
-          Text(s.t('Argomento', 'Topic'), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: testo)),
-          const SizedBox(height: 8),
-          Wrap(spacing: 8, runSpacing: 8, children: [
-            for (final c in _categorie)
-              ChoiceChip(
-                label: Text((c['label'] ?? c['code']).toString()),
-                selected: _categoria == c['code'],
-                showCheckmark: false,
-                selectedColor: soleChiaro,
-                side: BorderSide(color: _categoria == c['code'] ? sole : bordo, width: _categoria == c['code'] ? 1.5 : 1),
-                labelStyle: TextStyle(fontWeight: FontWeight.w700, color: _categoria == c['code'] ? soleScuro : testo),
-                onSelected: (_) => setState(() => _categoria = c['code'] as String),
-              ),
-          ]),
-          const SizedBox(height: 16),
-          Riquadro(
-            icona: Icons.public_rounded,
-            accento: Accento.blu,
-            messaggio: s.t('Le idee sono pubbliche: le vedono tutti gli utenti dell’app e i gestori del parco.', 'Ideas are public: all app users and park managers can see them.'),
-          ),
-          const SizedBox(height: 16),
-          PulsanteAzione(testo: _invio ? s.t('Invio in corso...', 'Submitting...') : s.t('Rivedi e invia', 'Review and submit'), icona: Icons.send_rounded, onPressed: _invio ? null : () => _mostraAnteprima(s)),
-        ])),
+        PulsanteAzione(
+          testo: s.t('Proponi un’idea', 'Suggest an idea'),
+          icona: Icons.add_rounded,
+          colore: soleScuro,
+          onPressed: _apriNuovaIdea,
+        ),
         const SizedBox(height: 28),
         TitoloSezione(
           s.t('Idee della comunità', 'Community ideas'),
@@ -2236,6 +2156,140 @@ class _SchermataIdeeState extends State<SchermataIdee> {
         ),
         AnimatedSwitcher(duration: durata(context, 250), child: _elencoIdee(s)),
       ])),
+    );
+  }
+}
+
+/// Pannello che si apre dal pulsante "Proponi un'idea".
+/// Chiude restituendo `true` quando l'idea è stata pubblicata.
+class _FoglioNuovaIdea extends StatefulWidget {
+  final Copie s;
+  final List<Map<String, dynamic>> categorie;
+  final TextEditingController titolo;
+  final TextEditingController dettagli;
+  const _FoglioNuovaIdea({required this.s, required this.categorie, required this.titolo, required this.dettagli});
+
+  @override
+  State<_FoglioNuovaIdea> createState() => _FoglioNuovaIdeaState();
+}
+
+class _FoglioNuovaIdeaState extends State<_FoglioNuovaIdea> {
+  bool _invio = false;
+  late String _categoria = widget.categorie.any((c) => c['code'] == 'other')
+      ? 'other'
+      : (widget.categorie.first['code'] as String);
+
+  String _nomeCategoria(String code) =>
+      (widget.categorie.firstWhere((c) => c['code'] == code, orElse: () => const {'label': 'Altro'})['label'] ?? code).toString();
+
+  Future<void> _mostraAnteprima() async {
+    final s = widget.s;
+    final titolo = widget.titolo.text.trim();
+    final dettagli = widget.dettagli.text.trim();
+    if (titolo.length < 3 || dettagli.length < 10) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.t('Inserisci un titolo di almeno 3 caratteri e una descrizione di almeno 10.', 'Enter a title of at least 3 characters and a description of at least 10.'))));
+      return;
+    }
+    final conferma = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        icon: const IconaTonda(Icons.lightbulb_rounded, colore: soleScuro, sfondo: soleChiaro, dimensione: 56),
+        title: Text(s.t('Anteprima del suggerimento', 'Suggestion preview')),
+        content: SingleChildScrollView(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(color: sfondo, borderRadius: BorderRadius.circular(16)),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(titolo, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, height: 1.3)),
+              const SizedBox(height: 6),
+              Text(dettagli, style: const TextStyle(color: testoSecondario, height: 1.4)),
+              const SizedBox(height: 10),
+              Etichetta('${s.t('Argomento', 'Topic')}: ${_nomeCategoria(_categoria)}', colore: soleScuro, sfondo: soleChiaro),
+            ]),
+          ),
+          const SizedBox(height: 12),
+          Row(children: [
+            const Icon(Icons.public_rounded, size: 16, color: testoSecondario),
+            const SizedBox(width: 6),
+            Expanded(child: Text(s.t('Sarà visibile a tutti gli utenti dell’app.', 'It will be visible to all app users.'), style: const TextStyle(color: testoSecondario, fontSize: 13))),
+          ]),
+        ])),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: Text(s.t('Modifica', 'Edit'))),
+          FilledButton(onPressed: () => Navigator.of(dialogContext).pop(true), child: Text(s.t('Invia idea', 'Submit idea'))),
+        ],
+      ),
+    );
+    if (conferma == true) await _inviaIdea();
+  }
+
+  Future<void> _inviaIdea() async {
+    final titolo = widget.titolo.text.trim();
+    final dettagli = widget.dettagli.text.trim();
+    setState(() => _invio = true);
+    try {
+      // Il backend non ha un titolo: va nella prima riga della descrizione (max 1000 caratteri).
+      await CitizenApi.instance.createSuggestion(category: _categoria, description: '$titolo\n$dettagli');
+      widget.titolo.clear();
+      widget.dettagli.clear();
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _invio = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.s;
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(22, 0, 22, 22),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const IconaTonda(Icons.edit_note_rounded, colore: soleScuro, sfondo: soleChiaro, dimensione: 44),
+              const SizedBox(width: 12),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(s.t('La tua idea', 'Your idea'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: testo)),
+                const SizedBox(height: 3),
+                Text(s.t('Raccontaci cosa migliorerebbe il parco.', 'Tell us what could make the park better.'), style: const TextStyle(fontSize: 14, height: 1.4, color: testoSecondario)),
+              ])),
+            ]),
+            const SizedBox(height: 18),
+            TextField(controller: widget.titolo, autofocus: true, textCapitalization: TextCapitalization.sentences, maxLength: 120, decoration: InputDecoration(labelText: s.t('Titolo', 'Title'), hintText: s.t('Es. Più ombra vicino all’area giochi', 'E.g. More shade near the playground'))),
+            const SizedBox(height: 10),
+            TextField(controller: widget.dettagli, minLines: 3, maxLines: 4, maxLength: 870, textCapitalization: TextCapitalization.sentences, decoration: InputDecoration(labelText: s.t('Descrizione', 'Description'), hintText: s.t('Descrivi la tua idea in poche parole…', 'Describe your idea in a few words…'), helperText: s.t('Non inserire dati personali.', 'Do not include personal information.'), alignLabelWithHint: true)),
+            const SizedBox(height: 14),
+            Text(s.t('Argomento', 'Topic'), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: testo)),
+            const SizedBox(height: 8),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              for (final c in widget.categorie)
+                ChoiceChip(
+                  label: Text((c['label'] ?? c['code']).toString()),
+                  selected: _categoria == c['code'],
+                  showCheckmark: false,
+                  selectedColor: soleChiaro,
+                  side: BorderSide(color: _categoria == c['code'] ? sole : bordo, width: _categoria == c['code'] ? 1.5 : 1),
+                  labelStyle: TextStyle(fontWeight: FontWeight.w700, color: _categoria == c['code'] ? soleScuro : testo),
+                  onSelected: (_) => setState(() => _categoria = c['code'] as String),
+                ),
+            ]),
+            const SizedBox(height: 16),
+            Riquadro(
+              icona: Icons.public_rounded,
+              accento: Accento.blu,
+              messaggio: s.t('Le idee sono pubbliche: le vedono tutti gli utenti dell’app e i gestori del parco.', 'Ideas are public: all app users and park managers can see them.'),
+            ),
+            const SizedBox(height: 16),
+            PulsanteAzione(testo: _invio ? s.t('Invio in corso...', 'Submitting...') : s.t('Rivedi e invia', 'Review and submit'), icona: Icons.send_rounded, onPressed: _invio ? null : _mostraAnteprima),
+          ]),
+        ),
+      ),
     );
   }
 }
@@ -2270,7 +2324,9 @@ class Avviso {
 
 class SchermataAvvisi extends StatefulWidget {
   final Copie s;
-  const SchermataAvvisi({super.key, required this.s});
+  /// Cambia ogni volta che l'utente apre la scheda: gli avvisi si ricaricano.
+  final int aperture;
+  const SchermataAvvisi({super.key, required this.s, this.aperture = 0});
 
   @override
   State<SchermataAvvisi> createState() => _SchermataAvvisiState();
@@ -2281,15 +2337,40 @@ class _SchermataAvvisiState extends State<SchermataAvvisi> {
   List<Avviso> _avvisi = [];
   bool _caricamento = true;
   String? _errore;
+  StreamSubscription<Map<String, dynamic>>? _live;
+  Timer? _debounce;
 
   @override
   void initState() {
     super.initState();
     unawaited(_caricaAvvisi());
+    CitizenApi.instance.connectLive();
+    // Il backend avvisa quando compare un avviso o cambia lo stato del parco;
+    // per modifiche e cancellazioni non c'è evento: ci pensano apertura e pull-to-refresh.
+    _live = CitizenApi.instance.events.listen((e) {
+      final type = e['type'];
+      if (type == 'notice_created' || type == 'park_status_changed') {
+        _debounce?.cancel();
+        _debounce = Timer(const Duration(milliseconds: 400), () => _caricaAvvisi(silenzioso: true));
+      }
+    });
   }
 
-  Future<void> _caricaAvvisi() async {
-    if (mounted) setState(() { _caricamento = true; _errore = null; });
+  @override
+  void didUpdateWidget(SchermataAvvisi oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.aperture != widget.aperture) unawaited(_caricaAvvisi(silenzioso: true));
+  }
+
+  @override
+  void dispose() {
+    _live?.cancel();
+    _debounce?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _caricaAvvisi({bool silenzioso = false}) async {
+    if (!silenzioso && mounted) setState(() { _caricamento = true; _errore = null; });
     try {
       final rows = await CitizenApi.instance.getNotices();
       final parsed = rows.map((item) {
@@ -2306,9 +2387,10 @@ class _SchermataAvvisiState extends State<SchermataAvvisi> {
           data: formattaData(item['starts_at']),
         );
       }).toList();
-      if (mounted) setState(() { _avvisi = parsed; _caricamento = false; });
+      if (mounted) setState(() { _avvisi = parsed; _caricamento = false; _errore = null; });
     } catch (e) {
-      if (mounted) setState(() { _errore = e.toString(); _caricamento = false; });
+      // Un aggiornamento silenzioso fallito non cancella gli avvisi già mostrati.
+      if (mounted && (!silenzioso || _avvisi.isEmpty)) setState(() { _errore = e.toString(); _caricamento = false; });
     }
   }
 
@@ -2421,7 +2503,9 @@ class _SchermataAvvisiState extends State<SchermataAvvisi> {
       );
     }
 
-    return ContenitorePagina(
+    return RefreshIndicator(
+      onRefresh: () => _caricaAvvisi(silenzioso: true),
+      child: ContenitorePagina(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -2454,6 +2538,7 @@ class _SchermataAvvisiState extends State<SchermataAvvisi> {
             AnimatedSwitcher(duration: durata(context, 250), child: contenuto),
           ],
         ),
+      ),
     );
   }
 }

@@ -201,18 +201,14 @@ class _SchermataAccessoState extends State<SchermataAccesso> {
                                   '1. Avvia il backend con Docker sul computer.\n'
                                       '2. Sul computer apri il terminale e scrivi «ipconfig» (Windows) o «ip addr» (Linux/macOS): '
                                       'usa l’indirizzo IPv4 della scheda Wi-Fi, per esempio 192.168.1.20.\n'
-                                      '3. Il telefono deve essere sulla stessa rete Wi-Fi del computer.
-
-'
-                                      'Wi-Fi che blocca i collegamenti tra dispositivi (scuola, ufficio)? Collega il telefono con il cavo USB, '
+                                      '3. Il telefono deve essere sulla stessa rete Wi-Fi del computer.\n\n'
+                                      'Sei su una rete Wi-Fi che blocca i collegamenti tra dispositivi (scuola, ufficio)? Collega il telefono con il cavo USB, '
                                       'sul computer esegui «adb reverse tcp:8000 tcp:8000» e qui scrivi 127.0.0.1.',
                                   '1. Start the backend with Docker on the computer.\n'
                                       '2. On the computer open a terminal and run “ipconfig” (Windows) or “ip addr” (Linux/macOS): '
                                       'use the Wi-Fi adapter’s IPv4 address, for example 192.168.1.20.\n'
-                                      '3. The phone must be on the same Wi-Fi network as the computer.
-
-'
-                                      'Wi-Fi blocking connections between devices (school, office)? Connect the phone by USB, '
+                                      '3. The phone must be on the same Wi-Fi network as the computer.\n\n'
+                                      'On a Wi-Fi network that blocks connections between devices (school, office)? Connect the phone by USB, '
                                       'run “adb reverse tcp:8000 tcp:8000” on the computer and enter 127.0.0.1 here.',
                                 ),
                                 style: const TextStyle(fontSize: 13.5, height: 1.5, color: testoSecondario),
