@@ -15,14 +15,16 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     expect(find.text('DEMO'), findsOneWidget);
 
-    await tester.tap(find.text('Elenco'));
+    // La scheda «Mappa» apre subito la mappa delle segnalazioni.
+    await tester.tap(find.text('Mappa'));
     await tester.pump(const Duration(seconds: 1));
-    await tester.pump(const Duration(seconds: 1));
-    expect(find.text('Illuminazione'), findsWidgets);
-
-    await tester.tap(find.byTooltip('Mostra mappa'));
     await tester.pump(const Duration(seconds: 1));
     expect(find.byType(MappaParco), findsOneWidget);
     expect(find.byType(Segnaposto), findsWidgets);
+
+    // Passando all'elenco si vedono le segnalazioni simulate.
+    await tester.tap(find.text('Elenco'));
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('Illuminazione'), findsWidgets);
   });
 }

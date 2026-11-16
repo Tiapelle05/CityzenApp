@@ -27,16 +27,79 @@ class CitizenApi {
   static const String _tokenKey = 'tryees_access_token';
   static const String _parkIdKey = 'tryees_park_id';
   static const String _demoKey = 'tryees_demo';
+  static const String _serverKey = 'tryees_server_url';
   static const bool _demoDaBuild = bool.fromEnvironment('DEMO');
   static final Uuid _uuid = Uuid();
 
-  late final String baseUrl = _configuredUrl.isNotEmpty
-      ? _configuredUrl.replaceAll(RegExp(r'/$'), '')
-      : kIsWeb
-          ? 'http://localhost:8000'
-          : defaultTargetPlatform == TargetPlatform.android
-              ? 'http://10.0.2.2:8000'
-              : 'http://127.0.0.1:8000';
+  /// Server scelto dall'utente nella pagina di accesso (salvato sul dispositivo).
+  String? _serverSalvato;
+  String? get serverSalvato => _serverSalvato;
+
+  /// Ordine: server scelto nell'app, poi --dart-define, poi l'indirizzo locale di sviluppo.
+  String get baseUrl => _serverSalvato ??
+      (_configuredUrl.isNotEmpty
+          ? _configuredUrl.replaceAll(RegExp(r'/$'), '')
+          : kIsWeb
+              ? 'http://localhost:8000'
+              : defaultTargetPlatform == TargetPlatform.android
+                  ? 'http://10.0.2.2:8000'
+                  : 'http://127.0.0.1:8000');
+
+  /// Vero quando l'app sa già a cosa collegarsi: altrimenti si mostra la pagina di accesso.
+  bool get configurato => testMode || demoMode || _serverSalvato != null || _configuredUrl.isNotEmpty;
+
+  /// Da «192.168.1.20» a «http://192.168.1.20:8000». Restituisce null se l'indirizzo non è valido.
+  static String? normalizzaServer(String testo) {
+    var t = testo.trim().replaceAll(RegExp(r'/+$'), '');
+    if (t.isEmpty) return null;
+    if (!t.contains('://')) t = 'http://$t';
+    final uri = Uri.tryParse(t);
+    if (uri == null || uri.host.isEmpty || !(uri.scheme == 'http' || uri.scheme == 'https')) return null;
+    final porta = uri.hasPort ? uri.port : (uri.scheme == 'https' ? 443 : 8000);
+    final portaTesto = (uri.scheme == 'https' && porta == 443) ? '' : ':$porta';
+    final percorso = uri.path.replaceAll(RegExp(r'/+$'), '');
+    return '${uri.scheme}://${uri.host}$portaTesto$percorso';
+  }
+
+  /// Controlla che all'indirizzo risponda il backend Treeyes (GET / → status ok).
+  static Future<void> verificaServer(String url) async {
+    final http.Response risposta;
+    try {
+      risposta = await http.get(Uri.parse('$url/')).timeout(const Duration(seconds: 6));
+    } on TimeoutException {
+      throw const ApiException('Il server non risponde. Controlla l’indirizzo e che il telefono sia sulla stessa rete Wi-Fi del computer.');
+    } catch (_) {
+      throw const ApiException('Server non raggiungibile. Controlla l’indirizzo, la rete Wi-Fi e che Docker sia avviato.');
+    }
+    dynamic dati;
+    try {
+      dati = jsonDecode(utf8.decode(risposta.bodyBytes));
+    } catch (_) {}
+    if (risposta.statusCode != 200 || dati is! Map || dati['status'] != 'ok') {
+      throw ApiException('All’indirizzo risponde qualcosa, ma non sembra il server Treeyes (codice ${risposta.statusCode}).');
+    }
+  }
+
+  /// Collega l'app a un server reale: lo salva, esce dalla demo e si registra.
+  /// Se il server cambia, il token del server precedente non vale più.
+  Future<void> collegaServer(String url) async {
+    final prefs = await SharedPreferences.getInstance();
+    disconnectLive();
+    if (url != _serverSalvato) {
+      _token = null;
+      _parkId = null;
+      await prefs.remove(_tokenKey);
+      await prefs.remove(_parkIdKey);
+    }
+    _serverSalvato = url;
+    await prefs.setString(_serverKey, url);
+    _demoScelto = false;
+    demoMode = false;
+    await prefs.setBool(_demoKey, false);
+    _park = null;
+    _cachedParkStatus = null;
+    await initialize().timeout(const Duration(seconds: 20));
+  }
 
   String? _token;
   int? _parkId;
@@ -67,6 +130,7 @@ class CitizenApi {
 
   Future<void> _initializeInternal() async {
     final prefs = await SharedPreferences.getInstance();
+    _serverSalvato = prefs.getString(_serverKey);
     final daUrl = kIsWeb && const {'1', 'true', 'si', 'sì'}.contains(Uri.base.queryParameters['demo']);
     demoMode = _demoScelto ?? (_demoDaBuild || daUrl || (prefs.getBool(_demoKey) ?? false));
     if (demoMode) {
@@ -75,6 +139,8 @@ class CitizenApi {
       initializationError = null;
       return;
     }
+    // Nessun server scelto: la pagina di accesso chiederà l'indirizzo.
+    if (!configurato) return;
     var installId = prefs.getString(_installIdKey);
     if (installId == null || installId.isEmpty) {
       installId = _uuid.v4();
@@ -446,7 +512,10 @@ class CitizenApi {
 
   String _cleanError(Object error) {
     if (error is ApiException) return error.message;
-    if (error.toString().contains('SocketException') || error.toString().contains('Failed host lookup')) {
+    if (error is TimeoutException ||
+        error.toString().contains('SocketException') ||
+        error.toString().contains('ClientException') ||
+        error.toString().contains('Failed host lookup')) {
       return 'Backend non raggiungibile. Avvia Docker e verifica l’indirizzo API.';
     }
     return error.toString().replaceFirst('Exception: ', '');

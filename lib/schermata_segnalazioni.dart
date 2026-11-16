@@ -18,7 +18,8 @@ class SchermataSegnalazioni extends StatefulWidget {
 
 class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> {
   bool _soloMie = false;
-  bool _mappa = false;
+  /// La mappa è la vista iniziale: si capisce subito cosa succede e dove.
+  bool _mappa = true;
 
   /// Segnalazione scelta sulla mappa (per id).
   Object? _selezionata;
@@ -78,7 +79,8 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> {
           ? await CitizenApi.instance.getMyReports(limit: 50)
           // Le idee (suggestion) hanno la loro schermata: qui solo i problemi
           : await CitizenApi.instance.getFeed(kind: 'problem', limit: 50);
-      final rows = (data['items'] as List).cast<Map<String, dynamic>>();
+      var rows = (data['items'] as List).cast<Map<String, dynamic>>();
+      if (_soloMie) rows = await _conPosizione(rows);
       if (mounted) {
         setState(() {
           _items = rows;
@@ -100,6 +102,21 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> {
         });
       }
     }
+  }
+
+  /// Il server reale mette la posizione solo nel dettaglio della segnalazione:
+  /// per le proprie la si recupera da lì, così compaiono sulla mappa.
+  /// (Quella delle segnalazioni altrui non viene mai inviata, per privacy.)
+  Future<List<Map<String, dynamic>>> _conPosizione(List<Map<String, dynamic>> rows) {
+    return Future.wait(rows.map((r) async {
+      if (MappaParco.puntoDi(r) != null || r['id'] is! int) return r;
+      try {
+        final d = await CitizenApi.instance.getReport(r['id'] as int);
+        return {...r, ...d};
+      } catch (_) {
+        return r;
+      }
+    }));
   }
 
   Color _coloreStato(String? st) => switch (st) {
@@ -301,7 +318,7 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         MappaParco(
-          altezza: 380,
+          altezza: 440,
           centro: MappaParco.centroParco(conPosizione.map((e) => e.$2)),
           onTocco: (_) => setState(() => _selezionata = null),
           marcatori: [
@@ -365,9 +382,19 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> {
                   icona: conPosizione.isEmpty ? Icons.location_off_rounded : Icons.touch_app_rounded,
                   accento: Accento.blu,
                   messaggio: conPosizione.isEmpty
-                      ? s.t('Nessuna segnalazione ha una posizione da mostrare.', 'No report has a location to show.')
+                      ? (_soloMie
+                          ? s.t('Non hai ancora inviato segnalazioni. Usa «Segnala» qui sotto per farlo.',
+                              'You have not sent any reports yet. Use “Report” below.')
+                          : _items.isNotEmpty
+                              ? s.t(
+                                  'Per privacy il server non mostra dove si trovano le segnalazioni degli altri '
+                                      '(${_items.length} nell’elenco). Scegli «Solo le mie» per vedere le tue sulla mappa.',
+                                  'For privacy the server does not show where other people’s reports are '
+                                      '(${_items.length} in the list). Choose “Only mine” to see yours on the map.',
+                                )
+                              : s.t('Nessuna segnalazione da mostrare sulla mappa.', 'No reports to show on the map.'))
                       : [
-                          s.t('Tocca un segnaposto per vedere la segnalazione.', 'Tap a pin to see the report.'),
+                          s.t('Tocca un puntino sulla mappa per vedere di cosa si tratta.', 'Tap a dot on the map to see what it is about.'),
                           if (senzaPosizione > 0)
                             s.t(
                               '$senzaPosizione senza posizione non sono sulla mappa.',
@@ -425,45 +452,44 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             TitoloPagina(
-              titolo: s.t('Segnalazioni', 'Reports'),
-              descrizione: s.t('Cosa viene segnalato nel parco e a che punto è.', 'What is reported in the park and its progress.'),
-              icona: Icons.list_alt_rounded,
+              titolo: s.t('Mappa delle segnalazioni', 'Reports map'),
+              descrizione: s.t(
+                'Ogni puntino è un problema segnalato; il colore dice a che punto è.',
+                'Each dot is a reported problem; its colour shows its progress.',
+              ),
+              icona: Icons.map_rounded,
               accento: Accento.blu,
             ),
-            Row(
-              children: [
-                Expanded(
-                  child: SegmentedButton<bool>(
-                    showSelectedIcon: false,
-                    segments: [
-                      ButtonSegment(value: false, icon: const Icon(Icons.park_outlined), label: Text(s.t('Nel parco', 'In the park'))),
-                      ButtonSegment(value: true, icon: const Icon(Icons.person_outline_rounded), label: Text(s.t('Le mie', 'Mine'))),
-                    ],
-                    selected: {_soloMie},
-                    onSelectionChanged: (v) {
-                      setState(() => _soloMie = v.first);
-                      unawaited(_carica());
-                    },
-                  ),
-                ),
-                const SizedBox(width: 10),
-                IconButton.filledTonal(
-                  tooltip: _mappa ? s.t('Mostra elenco', 'Show list') : s.t('Mostra mappa', 'Show map'),
-                  style: IconButton.styleFrom(
-                    backgroundColor: _mappa ? cieloScuro : cieloChiaro,
-                    foregroundColor: _mappa ? Colors.white : cieloScuro,
-                    fixedSize: const Size(48, 48),
-                  ),
-                  onPressed: () => setState(() {
-                    _mappa = !_mappa;
-                    _selezionata = null;
-                  }),
-                  icon: AnimatedSwitcher(
-                    duration: durata(context, 200),
-                    child: Icon(_mappa ? Icons.view_agenda_rounded : Icons.map_rounded, key: ValueKey(_mappa)),
-                  ),
-                ),
-              ],
+            SizedBox(
+              width: double.infinity,
+              child: SegmentedButton<bool>(
+                showSelectedIcon: false,
+                segments: [
+                  ButtonSegment(value: true, icon: const Icon(Icons.map_outlined), label: Text(s.t('Mappa', 'Map'))),
+                  ButtonSegment(value: false, icon: const Icon(Icons.view_agenda_outlined), label: Text(s.t('Elenco', 'List'))),
+                ],
+                selected: {_mappa},
+                onSelectionChanged: (v) => setState(() {
+                  _mappa = v.first;
+                  _selezionata = null;
+                }),
+              ),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: SegmentedButton<bool>(
+                showSelectedIcon: false,
+                segments: [
+                  ButtonSegment(value: false, icon: const Icon(Icons.groups_outlined), label: Text(s.t('Tutte', 'All'))),
+                  ButtonSegment(value: true, icon: const Icon(Icons.person_outline_rounded), label: Text(s.t('Solo le mie', 'Only mine'))),
+                ],
+                selected: {_soloMie},
+                onSelectionChanged: (v) {
+                  setState(() => _soloMie = v.first);
+                  unawaited(_carica());
+                },
+              ),
             ),
             const SizedBox(height: 20),
             AnimatedSwitcher(duration: durata(context, 250), child: _contenuto(s)),

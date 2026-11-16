@@ -15,7 +15,7 @@ void main() {
     expect(find.byType(NavigationBar), findsOneWidget);
     expect(find.text('Inizio'), findsOneWidget);
     expect(find.text('Segnala'), findsOneWidget);
-    expect(find.text('Elenco'), findsOneWidget);
+    expect(find.text('Mappa'), findsOneWidget);
     expect(find.text('Idee'), findsOneWidget);
     expect(find.text('Avvisi'), findsOneWidget);
     expect(find.text('Esplora il parco'), findsOneWidget);

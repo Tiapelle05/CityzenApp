@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 
 import 'citizen_api.dart';
 import 'mappa_parco.dart';
+import 'schermata_accesso.dart';
 import 'schermata_segnalazioni.dart';
 import 'ui.dart';
 
@@ -96,28 +97,35 @@ class TreeyesApp extends ParkApp {
 
 class _ParkAppState extends State<ParkApp> {
   bool _inglese = false;
-  bool _demo = CitizenApi.instance.demoMode;
+  /// Falso finché l'utente non ha scelto un server o la demo: si mostra la pagina di accesso.
+  bool _collegato = CitizenApi.instance.configurato;
+  /// Cresce a ogni nuovo collegamento: tutte le schermate ricaricano i dati.
+  int _sessione = 0;
   final ThemeData _tema = temaTryees();
-
-  Future<void> _cambiaDemo(bool attiva) async {
-    await CitizenApi.instance.setDemoMode(attiva);
-    if (mounted) setState(() => _demo = attiva);
-  }
 
   @override
   Widget build(BuildContext context) {
+    void cambiaLingua(bool valore) => setState(() => _inglese = valore);
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Treeyes',
       theme: _tema,
-      // La chiave cambia con la modalità demo: tutte le schermate ricaricano i dati.
-      home: NavigazionePrincipale(
-        key: ValueKey(_demo),
-        inglese: _inglese,
-        onLinguaCambiata: (valore) => setState(() => _inglese = valore),
-        demo: _demo,
-        onDemoCambiata: _cambiaDemo,
-      ),
+      home: _collegato
+          ? NavigazionePrincipale(
+              key: ValueKey(_sessione),
+              inglese: _inglese,
+              onLinguaCambiata: cambiaLingua,
+              demo: CitizenApi.instance.demoMode,
+              onCambiaCollegamento: () => setState(() => _collegato = false),
+            )
+          : SchermataAccesso(
+              s: Copie(_inglese),
+              onLinguaCambiata: cambiaLingua,
+              onCollegato: () => setState(() {
+                _collegato = true;
+                _sessione++;
+              }),
+            ),
     );
   }
 }
@@ -126,14 +134,15 @@ class NavigazionePrincipale extends StatefulWidget {
   final bool inglese;
   final ValueChanged<bool> onLinguaCambiata;
   final bool demo;
-  final Future<void> Function(bool attiva)? onDemoCambiata;
+  /// Torna alla pagina di accesso per scegliere un altro server o la demo.
+  final VoidCallback? onCambiaCollegamento;
 
   const NavigazionePrincipale({
     super.key,
     required this.inglese,
     required this.onLinguaCambiata,
     this.demo = false,
-    this.onDemoCambiata,
+    this.onCambiaCollegamento,
   });
 
   @override
@@ -145,13 +154,15 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
   /// Colore di ogni sezione, nello stesso ordine delle pagine.
   static const List<Accento> _accenti = [
     Accento.verde,
-    Accento.arancio,
     Accento.blu,
+    Accento.arancio,
     Accento.giallo,
     Accento.viola,
   ];
 
   int _pagina = 0;
+  /// Cresce a ogni segnalazione inviata: la mappa si ricarica.
+  int _invii = 0;
   late final AnimationController _transizione = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 320),
@@ -221,77 +232,68 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
     );
   }
 
-  Future<void> _apriModalitaDemo(Copie s) async {
-    var attiva = widget.demo;
-    var inCambio = false;
-    await showModalBottomSheet<void>(
+  Future<void> _apriCollegamento(Copie s) async {
+    final demo = widget.demo;
+    final server = CitizenApi.instance.baseUrl;
+    final cambia = await showModalBottomSheet<bool>(
       context: context,
       showDragHandle: true,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, aggiorna) => SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(22, 0, 22, 22),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(children: [
-                  const IconaTonda(Icons.science_rounded, colore: lavanda, sfondo: lavandaChiaro, dimensione: 48),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Text(s.t('Modalità demo', 'Demo mode'), style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w900)),
-                  ),
-                ]),
-                const SizedBox(height: 14),
-                Text(
-                  s.t(
-                    'Prova l’app senza server: il Parco Sempione di Milano con segnalazioni, idee e avvisi simulati su una mappa vera. '
-                        'Quello che invii resta sul dispositivo e avanza di stato da solo.',
-                    'Try the app without a server: Milan’s Parco Sempione with simulated reports, ideas and notices on a real map. '
-                        'What you send stays on the device and progresses on its own.',
-                  ),
-                  style: const TextStyle(fontSize: 14.5, height: 1.45, color: testoSecondario),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(22, 0, 22, 22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(children: [
+                IconaTonda(
+                  demo ? Icons.science_rounded : Icons.cloud_done_rounded,
+                  colore: demo ? lavanda : foresta,
+                  sfondo: demo ? lavandaChiaro : menta,
+                  dimensione: 48,
                 ),
-                const SizedBox(height: 16),
-                Scheda(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  coloreBordo: attiva ? lavanda.withValues(alpha: .5) : null,
-                  child: SwitchListTile(
-                    value: attiva,
-                    activeThumbColor: Colors.white,
-                    activeTrackColor: lavanda,
-                    title: Text(s.t('Usa dati simulati', 'Use simulated data'), style: const TextStyle(fontWeight: FontWeight.w800)),
-                    subtitle: Text(attiva ? s.t('Attiva', 'On') : s.t('Dati reali dal server', 'Real data from the server')),
-                    secondary: inCambio
-                        ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.4))
-                        : Icon(attiva ? Icons.science_rounded : Icons.cloud_outlined, color: attiva ? lavanda : testoSecondario),
-                    onChanged: inCambio
-                        ? null
-                        : (valore) async {
-                            aggiorna(() {
-                              attiva = valore;
-                              inCambio = true;
-                            });
-                            await widget.onDemoCambiata?.call(valore);
-                            if (ctx.mounted) Navigator.of(ctx).pop();
-                          },
-                  ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(
+                      demo ? s.t('Modalità demo', 'Demo mode') : s.t('Collegato al server', 'Connected to the server'),
+                      style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w900),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      demo ? s.t('Dati simulati, nulla viene inviato.', 'Simulated data, nothing is sent.') : server,
+                      style: const TextStyle(fontSize: 14, color: testoSecondario),
+                    ),
+                  ]),
                 ),
-              ],
-            ),
+              ]),
+              const SizedBox(height: 20),
+              SizedBox(
+                height: 52,
+                child: FilledButton.tonalIcon(
+                  onPressed: () => Navigator.of(ctx).pop(true),
+                  icon: const Icon(Icons.swap_horiz_rounded),
+                  label: Text(demo ? s.t('Collegati a un server', 'Connect to a server') : s.t('Cambia server o usa la demo', 'Change server or use demo')),
+                ),
+              ),
+            ],
           ),
         ),
       ),
     );
+    if (cambia == true) {
+      CitizenApi.instance.disconnectLive();
+      widget.onCambiaCollegamento?.call();
+    }
   }
 
-  Widget _pulsanteDemo(Copie s) {
+  Widget _pulsanteCollegamento(Copie s) {
     final attiva = widget.demo;
     return Tooltip(
-      message: s.t('Modalità demo', 'Demo mode'),
+      message: s.t('Collegamento', 'Connection'),
       child: InkWell(
         borderRadius: BorderRadius.circular(20),
-        onTap: () => _apriModalitaDemo(s),
+        onTap: () => _apriCollegamento(s),
         child: AnimatedContainer(
           duration: durata(context, 200),
           padding: EdgeInsets.symmetric(horizontal: attiva ? 12 : 9, vertical: 8),
@@ -301,7 +303,7 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
             border: Border.all(color: attiva ? lavanda.withValues(alpha: .5) : bordo),
           ),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(attiva ? Icons.science_rounded : Icons.science_outlined, size: 18, color: attiva ? lavanda : testoSecondario),
+            Icon(attiva ? Icons.science_rounded : Icons.cloud_done_outlined, size: 18, color: attiva ? lavanda : foresta),
             if (attiva) ...[
               const SizedBox(width: 6),
               const Text('DEMO', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w900, color: lavanda, letterSpacing: .6)),
@@ -319,12 +321,20 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
     final pagine = [
       SchermataInizio(
         s: s,
-        onSegnalazioni: () => _vaiA(1),
+        onSegnalazioni: () => _vaiA(2),
+        onMappa: () => _vaiA(1),
         onIdee: () => _vaiA(3),
         onAvvisi: () => _vaiA(4),
       ),
-      SchermataSegnalazione(s: s),
-      SchermataSegnalazioni(s: s),
+      SchermataSegnalazioni(key: ValueKey('mappa-$_invii'), s: s),
+      SchermataSegnalazione(
+        s: s,
+        onInviata: () {
+          // La mappa si ricarica e mostra subito la nuova segnalazione.
+          setState(() => _invii++);
+          _vaiA(1);
+        },
+      ),
       SchermataIdee(s: s),
       SchermataAvvisi(s: s),
     ];
@@ -368,8 +378,8 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
           ],
         ),
         actions: [
-          if (widget.onDemoCambiata != null) ...[
-            _pulsanteDemo(s),
+          if (widget.onCambiaCollegamento != null) ...[
+            _pulsanteCollegamento(s),
             const SizedBox(width: 8),
           ],
           _selettoreLingua(s),
@@ -420,14 +430,19 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
                 label: s.t('Inizio', 'Home'),
               ),
               NavigationDestination(
-                icon: const Icon(Icons.add_a_photo_outlined),
-                selectedIcon: const Icon(Icons.add_a_photo_rounded),
-                label: s.t('Segnala', 'Report'),
+                icon: const Icon(Icons.map_outlined),
+                selectedIcon: const Icon(Icons.map_rounded),
+                label: s.t('Mappa', 'Map'),
               ),
               NavigationDestination(
-                icon: const Icon(Icons.list_alt_outlined),
-                selectedIcon: const Icon(Icons.list_alt_rounded),
-                label: s.t('Elenco', 'Reports'),
+                // Azione principale: sempre ben riconoscibile, al centro.
+                icon: Container(
+                  width: 44,
+                  height: 32,
+                  decoration: BoxDecoration(color: corallo, borderRadius: BorderRadius.circular(16)),
+                  child: const Icon(Icons.add_rounded, color: Colors.white, size: 26),
+                ),
+                label: s.t('Segnala', 'Report'),
               ),
               NavigationDestination(
                 icon: const Icon(Icons.lightbulb_outline_rounded),
@@ -454,6 +469,7 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
 class SchermataInizio extends StatefulWidget {
   final Copie s;
   final VoidCallback onSegnalazioni;
+  final VoidCallback? onMappa;
   final VoidCallback? onIdee;
   final VoidCallback? onAvvisi;
 
@@ -461,6 +477,7 @@ class SchermataInizio extends StatefulWidget {
     super.key,
     required this.s,
     required this.onSegnalazioni,
+    this.onMappa,
     this.onIdee,
     this.onAvvisi,
   });
@@ -631,16 +648,27 @@ class _SchermataInizioState extends State<SchermataInizio> {
             child: _TesseraAzione(
               icona: Icons.add_location_alt_rounded,
               titolo: s.t('Segnala un problema', 'Report a problem'),
-              sottotitolo: s.t('Foto, posizione e invio in tre passi.', 'Photo, location and submit in three steps.'),
+              sottotitolo: s.t('Hai visto qualcosa che non va? Bastano pochi secondi.', 'Spotted something wrong? It takes a few seconds.'),
               accento: Accento.arancio,
               piena: true,
               onTap: widget.onSegnalazioni,
             ),
           ),
-          const SizedBox(height: 28),
-          Appare(indice: 3, child: TitoloSezione(s.t('Scopri di più', 'Discover more'))),
+          const SizedBox(height: 12),
           Appare(
-            indice: 4,
+            indice: 3,
+            child: _TesseraAzione(
+              icona: Icons.map_rounded,
+              titolo: s.t('Guarda la mappa', 'See the map'),
+              sottotitolo: s.t('Cosa è già stato segnalato e dove.', 'What has been reported, and where.'),
+              accento: Accento.blu,
+              onTap: widget.onMappa,
+            ),
+          ),
+          const SizedBox(height: 28),
+          Appare(indice: 4, child: TitoloSezione(s.t('Scopri di più', 'Discover more'))),
+          Appare(
+            indice: 5,
             child: IntrinsicHeight(
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -777,7 +805,9 @@ class _TesseraAzione extends StatelessWidget {
 
 class SchermataSegnalazione extends StatefulWidget {
   final Copie s;
-  const SchermataSegnalazione({super.key, required this.s});
+  /// Chiamata quando l'utente, dopo l'invio, vuole vedere la segnalazione sulla mappa.
+  final VoidCallback? onInviata;
+  const SchermataSegnalazione({super.key, required this.s, this.onInviata});
 
   @override
   State<SchermataSegnalazione> createState() => _SchermataSegnalazioneState();
@@ -875,6 +905,8 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
         _errore = null;
         _passaggio++;
       });
+      // La posizione si cerca da sola: l'utente non deve premere nulla.
+      if (_passaggio == 1 && _posizione == null && !_caricamentoGps) unawaited(_rilevaPosizione());
     } else {
       _mostraConferma();
     }
@@ -901,8 +933,11 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
       final file = await ImagePicker().pickImage(source: source, imageQuality: 82, maxWidth: 1600);
       if (!mounted || file == null) return;
       setState(() { _foto = file; _anteprimaFoto = file.readAsBytes(); _errore = null; });
-    } catch (e) {
-      _mostraErrore('Impossibile aprire la fotocamera o la galleria: $e');
+    } catch (_) {
+      _mostraErrore(widget.s.t(
+        'Non è stato possibile aprire la fotocamera o la galleria. Controlla i permessi dell’app.',
+        'Could not open the camera or gallery. Check the app permissions.',
+      ));
     }
   }
 
@@ -926,11 +961,16 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
     }
     try {
       final enabled = await Geolocator.isLocationServiceEnabled();
-      if (!enabled) throw Exception('Attiva la posizione GPS sul dispositivo.');
+      if (!enabled) {
+        throw Exception(widget.s.t('Attiva la posizione (GPS) del telefono e riprova.', 'Turn on your phone’s location (GPS) and try again.'));
+      }
       var permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
-        throw Exception('Permesso di localizzazione non concesso.');
+        throw Exception(widget.s.t(
+          'Per inviare la segnalazione serve sapere dove ti trovi: consenti l’accesso alla posizione.',
+          'To send the report we need to know where you are: allow location access.',
+        ));
       }
       final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, timeLimit: Duration(seconds: 20)),
@@ -947,7 +987,7 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
   Future<void> _mostraConferma() async {
     final s = widget.s;
     if (_posizione == null) {
-      _mostraErrore(s.t('Rileva la posizione GPS prima di inviare la segnalazione.', 'Get the GPS location before submitting the report.'));
+      _mostraErrore(s.t('Manca la posizione: tocca «Trova la mia posizione».', 'The location is missing: tap “Find my location”.'));
       setState(() => _passaggio = 1);
       return;
     }
@@ -970,7 +1010,7 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
         photoName: _foto?.name,
       );
       if (!mounted) return;
-      await showDialog<void>(
+      final vediMappa = await showDialog<bool>(
         context: context,
         barrierDismissible: false,
         builder: (dialogContext) => AlertDialog(
@@ -992,7 +1032,7 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
                 child: Column(
                   children: [
                     Text(
-                      '${s.t('Codice', 'Code')}: ${result['code'] ?? result['id']}',
+                      '${s.t('Numero segnalazione', 'Report number')}: ${result['code'] ?? result['id']}',
                       textAlign: TextAlign.center,
                       style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
                     ),
@@ -1006,9 +1046,20 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
             ],
           ),
           actions: [
+            if (widget.onInviata != null) ...[
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  icon: const Icon(Icons.map_rounded),
+                  label: Text(s.t('Vedi sulla mappa', 'See it on the map')),
+                ),
+              ),
+              const SizedBox(height: 4),
+            ],
             SizedBox(
               width: double.infinity,
-              child: FilledButton(onPressed: () => Navigator.of(dialogContext).pop(), child: Text(s.t('Ho capito', 'Done'))),
+              child: TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: Text(s.t('Chiudi', 'Close'))),
             ),
           ],
         ),
@@ -1018,6 +1069,7 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
         _passaggio = 0; _categoria = null; _gravita = 'media';
         _descrizione.clear(); _errore = null; _foto = null; _anteprimaFoto = null; _posizione = null;
       });
+      if (vediMappa == true) widget.onInviata?.call();
     } catch (e) {
       if (mounted) _mostraErrore(e.toString().replaceFirst('Exception: ', ''));
     } finally {
@@ -1029,9 +1081,9 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
 
   Widget _indicatorePassaggi(Copie s) {
     final nomi = [
-      s.t('Problema', 'Issue'),
-      s.t('Foto e luogo', 'Photo and place'),
-      s.t('Riepilogo', 'Review'),
+      s.t('Cosa', 'What'),
+      s.t('Dove e foto', 'Where and photo'),
+      s.t('Invia', 'Send'),
     ];
 
     Widget linea(bool attiva) => AnimatedContainer(
@@ -1308,8 +1360,8 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _intestazionePassaggio(
-          s.t('Che problema hai notato?', 'What problem did you notice?'),
-          s.t('Scegli la categoria che descrive meglio la situazione.', 'Choose the category that best describes the situation.'),
+          s.t('Cosa hai notato?', 'What did you notice?'),
+          s.t('Tocca la voce che descrive meglio il problema.', 'Tap the option that best describes the problem.'),
         ),
         LayoutBuilder(
           builder: (builderContext, constraints) {
@@ -1326,15 +1378,15 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
         const SizedBox(height: 24),
         _etichettaCampo(
           s.t('Quanto è urgente?', 'How urgent is it?'),
-          s.t('Scegli un livello per aiutare a capire la priorità del problema.', 'Choose a level to help show how urgent the issue is.'),
+          s.t('Se non sei sicuro, lascia «Media».', 'If unsure, leave “Medium”.'),
         ),
         _selettoreGravita(s),
         const SizedBox(height: 20),
         Riquadro(
           icona: Icons.shield_outlined,
           messaggio: s.t(
-            'La segnalazione è anonima. Testo, foto e stato saranno visibili agli altri utenti dell’app (la posizione no): non scrivere dati personali e non fotografare persone. La posizione GPS è necessaria per inviarla; la fotografia è facoltativa.',
-            'The report is anonymous. Its text, photo and status will be visible to other app users (its location will not): do not include personal data or photograph people. GPS location is required to submit it; a photo is optional.',
+            'La segnalazione è anonima. Non fotografare persone e non scrivere dati personali.',
+            'The report is anonymous. Do not photograph people or include personal data.',
           ),
         ),
       ],
@@ -1353,158 +1405,198 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
         ],
       );
 
+  /// Riquadro grande e toccabile per scegliere la foto: icona sopra, testo sotto
+  /// su una sola riga (si rimpicciolisce invece di andare a capo).
+  Widget _opzioneFoto(IconData icona, String etichetta, VoidCallback onTap, {bool principale = false}) {
+    final colore = principale ? Colors.white : cieloScuro;
+    return Semantics(
+      button: true,
+      label: etichetta,
+      excludeSemantics: true,
+      child: Material(
+        color: principale ? cieloScuro : cieloChiaro,
+        borderRadius: BorderRadius.circular(18),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(18),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 18),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Icon(icona, size: 32, color: colore),
+              const SizedBox(height: 8),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  etichetta,
+                  maxLines: 1,
+                  softWrap: false,
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: colore),
+                ),
+              ),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _schedaPosizione(Copie s) {
+    final trovata = _posizione != null;
+    return Scheda(
+      padding: const EdgeInsets.all(16),
+      coloreBordo: trovata ? foglia.withValues(alpha: .5) : null,
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _intestazioneScheda(
+          trovata ? Icons.where_to_vote_rounded : Icons.location_on_rounded,
+          trovata ? Accento.verde : Accento.arancio,
+          s.t('Dove si trova?', 'Where is it?'),
+          trovata
+              ? Etichetta(s.t('Trovata', 'Found'), icona: Icons.check_rounded)
+              : _caricamentoGps
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.4))
+                  : Etichetta(s.t('Necessaria', 'Required'), colore: coralloScuro, sfondo: coralloChiaro),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          trovata
+              ? s.t('Useremo il punto in cui ti trovi adesso.', 'We will use the spot where you are now.')
+              : _caricamentoGps
+                  ? s.t('Sto cercando la tua posizione…', 'Finding your location…')
+                  : s.t('Mettiti vicino al problema e tocca il pulsante qui sotto.', 'Stand near the problem and tap the button below.'),
+          style: const TextStyle(fontSize: 14, height: 1.4, color: testoSecondario),
+        ),
+        AnimatedSize(
+          duration: durata(context, 300),
+          curve: Curves.easeOutCubic,
+          child: trovata ? _mappaPosizione(s) : const SizedBox(width: double.infinity),
+        ),
+        const SizedBox(height: 14),
+        SizedBox(
+          width: double.infinity,
+          child: Builder(builder: (context) {
+            final onPressed = _caricamentoGps ? null : _rilevaPosizione;
+            final icon = _caricamentoGps
+                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.my_location_rounded);
+            final label = Text(
+              _caricamentoGps
+                  ? s.t('Ricerca in corso…', 'Searching…')
+                  : trovata
+                      ? s.t('Aggiorna posizione', 'Update location')
+                      : s.t('Trova la mia posizione', 'Find my location'),
+            );
+            // Pieno finché manca la posizione, poi secondario.
+            return trovata
+                ? OutlinedButton.icon(onPressed: onPressed, icon: icon, label: label)
+                : FilledButton.icon(onPressed: onPressed, icon: icon, label: label);
+          }),
+        ),
+      ]),
+    );
+  }
+
+  Widget _schedaFoto(Copie s) {
+    return Scheda(
+      padding: const EdgeInsets.all(16),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _intestazioneScheda(
+          Icons.photo_camera_rounded,
+          Accento.blu,
+          s.t('Aggiungi una foto', 'Add a photo'),
+          Etichetta(s.t('Facoltativa', 'Optional'), colore: testoSecondario, sfondo: sfondo),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          s.t('Aiuta a capire subito il problema. Inquadra solo quello, senza persone né targhe.',
+              'It helps show the problem at a glance. Frame only the problem, without people or number plates.'),
+          style: const TextStyle(fontSize: 14, height: 1.4, color: testoSecondario),
+        ),
+        const SizedBox(height: 14),
+        AnimatedSwitcher(
+          duration: durata(context, 250),
+          child: _foto != null
+              ? Column(
+                  key: const ValueKey('foto'),
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: FutureBuilder<Uint8List>(
+                        future: _anteprimaFoto,
+                        builder: (context, snapshot) => snapshot.hasData
+                            ? Image.memory(
+                                snapshot.data!,
+                                height: 200,
+                                width: double.infinity,
+                                fit: BoxFit.cover,
+                                semanticLabel: s.t('Foto allegata', 'Attached photo'),
+                              )
+                            : Container(
+                                height: 200,
+                                color: sfondo,
+                                alignment: Alignment.center,
+                                child: const CircularProgressIndicator(),
+                              ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () => _selezionaFoto(ImageSource.camera),
+                          icon: const Icon(Icons.refresh_rounded),
+                          label: FittedBox(fit: BoxFit.scaleDown, child: Text(s.t('Cambia', 'Change'), maxLines: 1)),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _rimuoviFoto,
+                          style: OutlinedButton.styleFrom(foregroundColor: coralloScuro),
+                          icon: const Icon(Icons.delete_outline_rounded),
+                          label: FittedBox(fit: BoxFit.scaleDown, child: Text(s.t('Rimuovi', 'Remove'), maxLines: 1)),
+                        ),
+                      ),
+                    ]),
+                  ],
+                )
+              : Row(
+                  key: const ValueKey('vuoto'),
+                  children: [
+                    Expanded(
+                      child: _opzioneFoto(
+                        Icons.photo_camera_rounded,
+                        s.t('Scatta foto', 'Take photo'),
+                        () => _selezionaFoto(ImageSource.camera),
+                        principale: true,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _opzioneFoto(
+                        Icons.photo_library_rounded,
+                        s.t('Dalla galleria', 'From gallery'),
+                        () => _selezionaFoto(ImageSource.gallery),
+                      ),
+                    ),
+                  ],
+                ),
+        ),
+      ]),
+    );
+  }
+
   Widget _passaggioFotoLuogo(Copie s) {
-    final posizioneRilevata = _posizione != null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _intestazionePassaggio(
-          s.t('Aggiungiamo i dettagli', 'Add the details'),
-          s.t('Allega una fotografia, se disponibile, e rileva il punto GPS del problema.', 'Attach a photo if available and get the GPS location of the issue.'),
+          s.t('Dove si trova il problema?', 'Where is the problem?'),
+          s.t('La posizione serve per trovarlo. La foto è facoltativa.', 'The location helps find it. The photo is optional.'),
         ),
-        Scheda(
-          padding: const EdgeInsets.all(16),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            _intestazioneScheda(
-              Icons.photo_camera_rounded,
-              Accento.blu,
-              s.t('Fotografia del problema', 'Photo of the issue'),
-              Etichetta(s.t('Facoltativa', 'Optional'), colore: testoSecondario, sfondo: sfondo),
-            ),
-            const SizedBox(height: 14),
-            AnimatedSwitcher(
-              duration: durata(context, 250),
-              child: _foto != null
-                  ? Column(
-                      key: const ValueKey('foto'),
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Stack(
-                          children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(16),
-                              child: FutureBuilder<Uint8List>(
-                                future: _anteprimaFoto,
-                                builder: (context, snapshot) => snapshot.hasData
-                                    ? Image.memory(snapshot.data!, height: 190, width: double.infinity, fit: BoxFit.cover)
-                                    : Container(
-                                        height: 190,
-                                        color: sfondo,
-                                        alignment: Alignment.center,
-                                        child: const CircularProgressIndicator(),
-                                      ),
-                              ),
-                            ),
-                            Positioned(
-                              top: 8,
-                              right: 8,
-                              child: IconButton.filled(
-                                tooltip: s.t('Rimuovi', 'Remove'),
-                                onPressed: _rimuoviFoto,
-                                style: IconButton.styleFrom(backgroundColor: Colors.white, foregroundColor: coralloScuro),
-                                icon: const Icon(Icons.delete_outline_rounded),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(_foto!.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, color: testoSecondario)),
-                      ],
-                    )
-                  : Container(
-                      key: const ValueKey('vuoto'),
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 20),
-                      decoration: BoxDecoration(
-                        color: sfondo,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: bordoForte),
-                      ),
-                      child: Column(children: [
-                        const Icon(Icons.add_photo_alternate_outlined, size: 36, color: testoTenue),
-                        const SizedBox(height: 8),
-                        Text(
-                          s.t('Nessuna fotografia selezionata. La foto è facoltativa e sarà visibile agli altri utenti: inquadra solo il problema, senza persone né targhe.', 'No photo selected. A photo is optional and will be visible to other users: frame only the issue, without people or number plates.'),
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(fontSize: 13.5, height: 1.45, color: testoSecondario),
-                        ),
-                      ]),
-                    ),
-            ),
-            const SizedBox(height: 12),
-            Row(children: [
-              Expanded(
-                child: FilledButton.tonalIcon(
-                  onPressed: () => _selezionaFoto(ImageSource.camera),
-                  style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
-                  icon: const Icon(Icons.camera_alt_outlined),
-                  label: Text(s.t('Fotocamera', 'Camera')),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: FilledButton.tonalIcon(
-                  onPressed: () => _selezionaFoto(ImageSource.gallery),
-                  style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
-                  icon: const Icon(Icons.photo_library_outlined),
-                  label: Text(s.t('Galleria', 'Gallery')),
-                ),
-              ),
-            ]),
-          ]),
-        ),
+        _schedaPosizione(s),
         const SizedBox(height: 14),
-        Scheda(
-          padding: const EdgeInsets.all(16),
-          coloreBordo: posizioneRilevata ? foglia.withValues(alpha: .5) : null,
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            _intestazioneScheda(
-              posizioneRilevata ? Icons.where_to_vote_rounded : Icons.location_on_rounded,
-              posizioneRilevata ? Accento.verde : Accento.arancio,
-              s.t('Posizione del problema', 'Issue location'),
-              posizioneRilevata
-                  ? Etichetta(s.t('Rilevata', 'Detected'), icona: Icons.check_rounded)
-                  : Etichetta(s.t('Obbligatoria', 'Required'), colore: coralloScuro, sfondo: coralloChiaro),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              posizioneRilevata
-                  ? 'GPS: ${_posizione!.latitude.toStringAsFixed(6)}, ${_posizione!.longitude.toStringAsFixed(6)}'
-                  : s.t('La posizione GPS è obbligatoria per inviare una segnalazione di problema.', 'GPS location is required to submit an issue report.'),
-              style: TextStyle(
-                fontSize: 14,
-                height: 1.4,
-                color: posizioneRilevata ? testo : testoSecondario,
-                fontWeight: posizioneRilevata ? FontWeight.w700 : FontWeight.w400,
-              ),
-            ),
-            AnimatedSize(
-              duration: durata(context, 300),
-              curve: Curves.easeOutCubic,
-              child: posizioneRilevata ? _mappaPosizione(s) : const SizedBox(width: double.infinity),
-            ),
-            const SizedBox(height: 14),
-            SizedBox(
-              width: double.infinity,
-              child: Builder(builder: (context) {
-                final onPressed = _caricamentoGps ? null : _rilevaPosizione;
-                final icon = _caricamentoGps
-                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.my_location_rounded);
-                final label = Text(_caricamentoGps ? s.t('Rilevamento...', 'Locating...') : s.t('Rileva posizione GPS', 'Get GPS location'));
-                // Pieno finché manca la posizione, poi secondario.
-                return posizioneRilevata
-                    ? OutlinedButton.icon(onPressed: onPressed, icon: icon, label: label)
-                    : FilledButton.icon(onPressed: onPressed, icon: icon, label: label);
-              }),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              s.t('La segnalazione può essere inviata solo se la posizione rientra nell’area del parco configurata.', 'The report can be submitted only if the location is within the configured park area.'),
-              style: const TextStyle(fontSize: 12.5, height: 1.45, color: testoSecondario),
-            ),
-          ]),
-        ),
+        _schedaFoto(s),
       ],
     );
   }
@@ -1583,9 +1675,9 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
       children: [
         _intestazionePassaggio(
           s.t('Ci siamo quasi!', 'Almost done!'),
-          s.t('La descrizione è facoltativa. Controlla i dettagli prima di inviare la segnalazione.', 'The description is optional. Review the details before submitting the report.'),
+          s.t('Se vuoi, aggiungi due parole. Poi tocca «Invia segnalazione».', 'Add a few words if you like, then tap “Send report”.'),
         ),
-        _etichettaCampo(s.t('Descrizione (facoltativa)', 'Description (optional)')),
+        _etichettaCampo(s.t('Vuoi aggiungere qualcosa? (facoltativo)', 'Anything to add? (optional)')),
         TextField(
           controller: _descrizione,
           minLines: 4,
@@ -1596,8 +1688,8 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
           textInputAction: TextInputAction.newline,
           decoration: InputDecoration(
             hintText: s.t(
-              'Aggiungi dettagli utili, per esempio un punto di riferimento vicino…',
-              'Add helpful details, such as a nearby landmark…',
+              'Es. «Panchina rotta vicino alla fontana»',
+              'E.g. “Broken bench near the fountain”',
             ),
             alignLabelWithHint: true,
             helperText: s.t('Non inserire dati personali.', 'Do not include personal information.'),
@@ -1609,12 +1701,12 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(s.t('Riepilogo', 'Review'), style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: testo)),
+              Text(s.t('La tua segnalazione', 'Your report'), style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: testo)),
               const SizedBox(height: 14),
               _rigaRiepilogo(s.t('Categoria', 'Category'), s.t(categoria.nomeIt, categoria.nomeEn), categoria.icona, categoria.accento),
               const Divider(height: 22),
               _rigaRiepilogo(
-                s.t('Gravità', 'Severity'),
+                s.t('Urgenza', 'Urgency'),
                 s.t(
                   _gravita == 'bassa' ? 'Bassa' : _gravita == 'media' ? 'Media' : 'Alta',
                   _gravita == 'bassa' ? 'Low' : _gravita == 'media' ? 'Medium' : 'High',
@@ -1623,11 +1715,16 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
                 _gravita == 'alta' ? Accento.arancio : _gravita == 'media' ? Accento.giallo : Accento.verde,
               ),
               const Divider(height: 22),
-              _rigaRiepilogo(s.t('Fotografia', 'Photo'), _foto?.name ?? s.t('Facoltativa', 'Optional'), Icons.photo_outlined, Accento.blu),
+              _rigaRiepilogo(
+                s.t('Foto', 'Photo'),
+                _foto != null ? s.t('Allegata', 'Attached') : s.t('Nessuna', 'None'),
+                Icons.photo_outlined,
+                Accento.blu,
+              ),
               const Divider(height: 22),
               _rigaRiepilogo(
                 s.t('Posizione', 'Location'),
-                _posizione == null ? s.t('Non rilevata', 'Not detected') : '${_posizione!.latitude.toStringAsFixed(4)}, ${_posizione!.longitude.toStringAsFixed(4)}',
+                _posizione == null ? s.t('Mancante', 'Missing') : s.t('Trovata', 'Found'),
                 Icons.location_on_outlined,
                 _posizione == null ? Accento.arancio : Accento.verde,
               ),
@@ -1672,8 +1769,8 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
                 : Icon(_passaggio == 2 ? Icons.send_rounded : Icons.arrow_forward_rounded),
             label: Text(
               s.t(
-                _invioInCorso ? 'Invio...' : _passaggio == 2 ? 'Completa' : 'Continua',
-                _invioInCorso ? 'Sending...' : _passaggio == 2 ? 'Finish' : 'Continue',
+                _invioInCorso ? 'Invio…' : _passaggio == 2 ? 'Invia segnalazione' : 'Continua',
+                _invioInCorso ? 'Sending…' : _passaggio == 2 ? 'Send report' : 'Continue',
               ),
             ),
             style: FilledButton.styleFrom(
@@ -1716,7 +1813,7 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
         children: [
           TitoloPagina(
             titolo: s.t('Segnala un problema', 'Report a problem'),
-            descrizione: s.t('Il tuo aiuto rende il parco un posto migliore.', 'Your help makes the park a better place.'),
+            descrizione: s.t('Tre passi semplici: cosa, dove, invia.', 'Three simple steps: what, where, send.'),
             icona: Icons.add_a_photo_rounded,
             accento: Accento.arancio,
           ),
