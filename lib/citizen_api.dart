@@ -394,7 +394,7 @@ class CitizenApi {
 
   /// Apre il WebSocket (idempotente). Messaggi: {type, data} con type
   /// report_created | report_status_changed | report_updated | notice_created |
-  /// park_status_changed | danger_alert. Si inoltrano solo quelli del parco in uso (o senza park_id).
+  /// notice_ended | park_status_changed | danger_alert. Si inoltrano solo quelli del parco in uso (o senza park_id).
   /// Se il token non c'è ancora, si connette appena initialize() riesce.
   void connectLive() {
     if (testMode || demoMode) return; // in demo gli eventi arrivano da DatiSimulati

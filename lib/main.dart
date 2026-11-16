@@ -127,10 +127,31 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
     // un pericolo segnalato dal backend deve arrivare ovunque si trovi l'utente.
     CitizenApi.instance.connectLive();
     _live = CitizenApi.instance.events.listen((e) {
-      if (e['type'] != 'danger_alert') return;
       final dati = e['data'];
-      if (dati is Map) _mostraPericolo(Map<String, dynamic>.from(dati));
+      if (dati is! Map) return;
+      if (e['type'] == 'danger_alert') {
+        _mostraPericolo(Map<String, dynamic>.from(dati));
+      } else if (e['type'] == 'notice_ended') {
+        _pericoloRientrato(dati['notice_id']);
+      }
     });
+  }
+
+  /// Avviso di pericolo mostrato in primo piano in questo momento e il contesto della sua finestra.
+  Object? _pericoloAperto;
+  BuildContext? _contestoPericolo;
+
+  /// L'operatore ha riarmato l'allarme o chiuso la pratica: se la finestra di quel
+  /// pericolo è ancora aperta si chiude e si avvisa che la situazione è rientrata.
+  void _pericoloRientrato(Object? noticeId) {
+    if (noticeId == null || noticeId != _pericoloAperto) return;
+    final ctx = _contestoPericolo;
+    if (ctx != null && ctx.mounted) Navigator.of(ctx).pop(false);
+    if (!mounted) return;
+    final s = Copie(widget.inglese);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(s.t('Pericolo rientrato: l’avviso è stato chiuso.', 'Danger over: the alert has been closed.')),
+    ));
   }
 
   @override
@@ -148,10 +169,13 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
     SystemSound.play(SystemSoundType.alert);
     final titolo = (dati['title'] as String?)?.trim();
     final testoAvviso = (dati['body'] as String?)?.trim();
+    _pericoloAperto = id;
     final vediAvvisi = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) {
+        _contestoPericolo = ctx;
+        return AlertDialog(
         backgroundColor: superficie,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(24),
@@ -204,8 +228,13 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
             label: Text(s.t('Vedi avvisi', 'See notices')),
           ),
         ],
-      ),
+      );
+      },
     );
+    if (_pericoloAperto == id) {
+      _pericoloAperto = null;
+      _contestoPericolo = null;
+    }
     if (vediAvvisi == true && mounted) _vaiA(4);
   }
 
@@ -2258,7 +2287,7 @@ class _SchermataAvvisiState extends State<SchermataAvvisi> {
     // per modifiche e cancellazioni non c'è evento: ci pensano apertura e pull-to-refresh.
     _live = CitizenApi.instance.events.listen((e) {
       final type = e['type'];
-      if (type == 'notice_created' || type == 'park_status_changed') {
+      if (type == 'notice_created' || type == 'notice_ended' || type == 'park_status_changed') {
         _debounce?.cancel();
         _debounce = Timer(const Duration(milliseconds: 400), () => _caricaAvvisi(silenzioso: true));
       }
