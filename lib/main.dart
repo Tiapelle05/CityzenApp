@@ -1,7 +1,7 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -56,6 +56,8 @@ class _ParkAppState extends State<ParkApp> {
               onLinguaCambiata: cambiaLingua,
               demo: CitizenApi.instance.demoMode,
               onCambiaCollegamento: () => setState(() => _collegato = false),
+              // Demo ⇄ server con un tocco: si ricostruiscono tutte le schermate.
+              onProfiloCambiato: () => setState(() => _sessione++),
             )
           : SchermataAccesso(
               s: Copie(_inglese),
@@ -75,6 +77,8 @@ class NavigazionePrincipale extends StatefulWidget {
   final bool demo;
   /// Torna alla pagina di accesso per scegliere un altro server o la demo.
   final VoidCallback? onCambiaCollegamento;
+  /// Chiamata dopo il passaggio diretto demo ⇄ server: l'app ricarica le schermate.
+  final VoidCallback? onProfiloCambiato;
 
   const NavigazionePrincipale({
     super.key,
@@ -82,6 +86,7 @@ class NavigazionePrincipale extends StatefulWidget {
     required this.onLinguaCambiata,
     this.demo = false,
     this.onCambiaCollegamento,
+    this.onProfiloCambiato,
   });
 
   @override
@@ -110,10 +115,115 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
     value: 1,
   );
 
+  StreamSubscription<Map<String, dynamic>>? _live;
+  /// Avvisi di pericolo già mostrati: lo stesso avviso non riapre la finestra.
+  final Set<Object> _pericoliMostrati = {};
+  bool _cambioProfilo = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Collegamento live attivo in tutta l'app, non solo nelle schede che lo usano:
+    // un pericolo segnalato dal backend deve arrivare ovunque si trovi l'utente.
+    CitizenApi.instance.connectLive();
+    _live = CitizenApi.instance.events.listen((e) {
+      if (e['type'] != 'danger_alert') return;
+      final dati = e['data'];
+      if (dati is Map) _mostraPericolo(Map<String, dynamic>.from(dati));
+    });
+  }
+
   @override
   void dispose() {
+    _live?.cancel();
     _transizione.dispose();
     super.dispose();
+  }
+
+  Future<void> _mostraPericolo(Map<String, dynamic> dati) async {
+    final id = dati['notice_id'] ?? '${dati['title']}|${dati['at']}';
+    if (!mounted || !_pericoliMostrati.add(id)) return;
+    final s = Copie(widget.inglese);
+    HapticFeedback.heavyImpact();
+    SystemSound.play(SystemSoundType.alert);
+    final titolo = (dati['title'] as String?)?.trim();
+    final testoAvviso = (dati['body'] as String?)?.trim();
+    final vediAvvisi = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: superficie,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: const BorderSide(color: coralloScuro, width: 2),
+        ),
+        icon: const IconaTonda(Icons.warning_amber_rounded, colore: coralloScuro, sfondo: coralloChiaro, dimensione: 64),
+        title: Semantics(
+          liveRegion: true,
+          child: Text(
+            titolo == null || titolo.isEmpty ? s.t('Pericolo nel parco', 'Danger in the park') : titolo,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900, color: coralloScuro),
+          ),
+        ),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(color: coralloChiaro, borderRadius: BorderRadius.circular(12)),
+            child: Text(
+              s.t('AVVISO DI SICUREZZA', 'SAFETY ALERT'),
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: coralloScuro, letterSpacing: .8),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            testoAvviso == null || testoAvviso.isEmpty
+                ? s.t('Evita la zona e segui le indicazioni del personale.', 'Avoid the area and follow staff instructions.')
+                : testoAvviso,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 16, height: 1.4, color: testo),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            s.t('In caso di emergenza chiama il 112.', 'In an emergency call 112.'),
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: testoSecondario),
+          ),
+        ]),
+        actionsAlignment: MainAxisAlignment.center,
+        actionsOverflowButtonSpacing: 8,
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(s.t('Ho capito', 'Got it')),
+          ),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(backgroundColor: coralloScuro),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            icon: const Icon(Icons.notifications_active_rounded),
+            label: Text(s.t('Vedi avvisi', 'See notices')),
+          ),
+        ],
+      ),
+    );
+    if (vediAvvisi == true && mounted) _vaiA(4);
+  }
+
+  /// Passa da demo a server (o viceversa) senza aprire la tendina.
+  /// Senza un server già scelto si apre la pagina di accesso per indicarlo.
+  Future<void> _cambiaProfilo(bool demo) async {
+    if (_cambioProfilo || demo == widget.demo) return;
+    if (!demo && !CitizenApi.instance.haServer) {
+      CitizenApi.instance.disconnectLive();
+      widget.onCambiaCollegamento?.call();
+      return;
+    }
+    setState(() => _cambioProfilo = true);
+    CitizenApi.instance.disconnectLive();
+    await CitizenApi.instance.setDemoMode(demo);
+    if (!mounted) return;
+    setState(() => _cambioProfilo = false);
+    widget.onProfiloCambiato?.call();
   }
 
   void _vaiA(int indice) {
@@ -219,30 +329,62 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
     }
   }
 
+  /// Interruttore a due segmenti Demo | Server sempre visibile nella barra in alto.
+  /// Toccare il profilo non attivo lo attiva subito; toccare quello attivo apre
+  /// i dettagli del collegamento (per cambiare server).
   Widget _pulsanteCollegamento(Copie s) {
-    final attiva = widget.demo;
-    return Tooltip(
-      message: s.t('Collegamento', 'Connection'),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(20),
-        onTap: () => _apriCollegamento(s),
-        child: AnimatedContainer(
-          duration: durata(context, 200),
-          padding: EdgeInsets.symmetric(horizontal: attiva ? 12 : 9, vertical: 8),
-          decoration: BoxDecoration(
-            color: attiva ? lavandaChiaro : superficie,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: attiva ? lavanda.withValues(alpha: .5) : bordo),
+    Widget segmento({required bool demo, required IconData icona, required String etichetta}) {
+      final attivo = widget.demo == demo;
+      final colore = demo ? lavanda : foresta;
+      return Semantics(
+        button: true,
+        selected: attivo,
+        label: etichetta,
+        child: Tooltip(
+          message: attivo
+              ? s.t('Dettagli collegamento', 'Connection details')
+              : s.t('Passa a: $etichetta', 'Switch to: $etichetta'),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: _cambioProfilo ? null : () => attivo ? _apriCollegamento(s) : _cambiaProfilo(demo),
+            child: AnimatedContainer(
+              duration: durata(context, 200),
+              constraints: const BoxConstraints(minHeight: 32, minWidth: 36),
+              padding: EdgeInsets.symmetric(horizontal: attivo ? 10 : 8, vertical: 6),
+              decoration: BoxDecoration(
+                color: attivo ? (demo ? lavandaChiaro : menta) : Colors.transparent,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                if (_cambioProfilo && !attivo)
+                  SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: colore))
+                else
+                  Icon(icona, size: 17, color: attivo ? colore : testoTenue),
+                if (attivo) ...[
+                  const SizedBox(width: 5),
+                  Text(
+                    etichetta.toUpperCase(),
+                    style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w900, color: colore, letterSpacing: .5),
+                  ),
+                ],
+              ]),
+            ),
           ),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(attiva ? Icons.science_rounded : Icons.cloud_done_outlined, size: 18, color: attiva ? lavanda : foresta),
-            if (attiva) ...[
-              const SizedBox(width: 6),
-              const Text('DEMO', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w900, color: lavanda, letterSpacing: .6)),
-            ],
-          ]),
         ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: superficie,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: bordo),
       ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        segmento(demo: true, icona: Icons.science_rounded, etichetta: 'Demo'),
+        segmento(demo: false, icona: Icons.cloud_done_outlined, etichetta: 'Server'),
+      ]),
     );
   }
 

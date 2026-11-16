@@ -46,7 +46,10 @@ class CitizenApi {
                   : 'http://127.0.0.1:8000');
 
   /// Vero quando l'app sa già a cosa collegarsi: altrimenti si mostra la pagina di accesso.
-  bool get configurato => testMode || demoMode || _serverSalvato != null || _configuredUrl.isNotEmpty;
+  bool get configurato => testMode || demoMode || haServer;
+
+  /// Vero quando c'è un server a cui tornare uscendo dalla demo senza la pagina di accesso.
+  bool get haServer => _serverSalvato != null || _configuredUrl.isNotEmpty;
 
   /// Da «192.168.1.20» a «http://192.168.1.20:8000». Restituisce null se l'indirizzo non è valido.
   static String? normalizzaServer(String testo) {
@@ -391,7 +394,7 @@ class CitizenApi {
 
   /// Apre il WebSocket (idempotente). Messaggi: {type, data} con type
   /// report_created | report_status_changed | report_updated | notice_created |
-  /// park_status_changed. Si inoltrano solo quelli del parco in uso (o senza park_id).
+  /// park_status_changed | danger_alert. Si inoltrano solo quelli del parco in uso (o senza park_id).
   /// Se il token non c'è ancora, si connette appena initialize() riesce.
   void connectLive() {
     if (testMode || demoMode) return; // in demo gli eventi arrivano da DatiSimulati
