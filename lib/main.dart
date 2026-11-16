@@ -6,7 +6,11 @@ import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'citizen_api.dart';
+import 'mappa_parco.dart';
 import 'schermata_segnalazioni.dart';
+import 'ui.dart';
+
+export 'ui.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -18,41 +22,19 @@ Future<void> main() async {
   runApp(const ParkApp());
 }
 
-const Color verdeScuro = Color(0xFF244B35);       // Verde bosco profondo: azioni principali
-const Color verdeProfondo = Color(0xFF17271D);    // Verde quasi nero: testo e contrasti
-const Color verdePrincipale = Color(0xFF718B65);  // Verde foglia
-const Color verdeMedio = Color(0xFF718B65);       // Verde foglia: indicatori
-const Color verdeAccento = Color(0xFF244B35);     // Verde bosco di accento
-const Color verdeIntermedio = Color(0xFFA3A65A);  // Verde oliva
-const Color verde = Color(0xFF244B35);
-const Color sfondo = Color(0xFFDCE8D8);            // Sfondo salvia chiaro
-const Color testo = Color(0xFF17271D);
-const Color testoSecondario = Color(0xFF455448);
-const Color bordo = Color(0xFF9BAA8D);  // Bordo verde-grigio visibile
-const Color verdeChiaro = Color(0xFFDCE6D3);
-const Color verdePallido = Color(0xFFEAF0E3);
-const Color superficieVerde = Color(0xFFFFFDF7);
-
-class Copie {
-  final bool inglese;
-  const Copie(this.inglese);
-
-  String t(String italiano, String english) => inglese ? english : italiano;
-}
-
 enum StatoParco {
-  ottimo('Ottimo', 'Excellent', 1, verde),
-  buono('Buono', 'Good', .75, verde),
-  discreto('Da monitorare', 'Needs attention', .5, Color(0xFF8A5A00)),
-  cattivo('Attenzione richiesta', 'Attention required', .25, Color(0xFFB42318)),
-  nonDisponibile('Non disponibile', 'Unavailable', 0, testoSecondario);
+  ottimo('Ottimo', 'Excellent', Icons.eco_rounded, [Color(0xFF0E5A3D), Color(0xFF23895A)]),
+  buono('Buono', 'Good', Icons.eco_rounded, [Color(0xFF0E5A3D), Color(0xFF23895A)]),
+  discreto('Da monitorare', 'Needs attention', Icons.visibility_rounded, [Color(0xFF9A5800), Color(0xFFD48A0C)]),
+  cattivo('Attenzione richiesta', 'Attention required', Icons.warning_amber_rounded, [Color(0xFF8E1B12), Color(0xFFCF3D24)]),
+  nonDisponibile('Non disponibile', 'Unavailable', Icons.cloud_off_rounded, [Color(0xFF3F4F46), Color(0xFF6B7C71)]);
 
-  const StatoParco(this.italiano, this.english, this.progresso, this.colore);
+  const StatoParco(this.italiano, this.english, this.icona, this.gradiente);
 
   final String italiano;
   final String english;
-  final double progresso;
-  final Color colore;
+  final IconData icona;
+  final List<Color> gradiente;
 }
 
 StatoParco _statoDaBackend(Map<String, dynamic>? data) {
@@ -114,63 +96,27 @@ class TreeyesApp extends ParkApp {
 
 class _ParkAppState extends State<ParkApp> {
   bool _inglese = false;
+  bool _demo = CitizenApi.instance.demoMode;
+  final ThemeData _tema = temaTryees();
+
+  Future<void> _cambiaDemo(bool attiva) async {
+    await CitizenApi.instance.setDemoMode(attiva);
+    if (mounted) setState(() => _demo = attiva);
+  }
 
   @override
   Widget build(BuildContext context) {
-    const colorePrimario = verdeScuro;
-    const coloreTesto = testo;
-    const coloreSecondario = testoSecondario;
-    const coloreBordo = bordo;
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Tryees',
-      theme: ThemeData(
-        useMaterial3: true,
-        materialTapTargetSize: MaterialTapTargetSize.padded,
-        visualDensity: VisualDensity.standard,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: colorePrimario,
-          primary: colorePrimario,
-          secondary: verdePrincipale,
-          surface: superficieVerde,
-        ),
-        textTheme: ThemeData.light().textTheme.apply(
-          bodyColor: coloreTesto,
-          displayColor: coloreTesto,
-        ),
-        scaffoldBackgroundColor: sfondo,
-        appBarTheme: AppBarTheme(
-          backgroundColor: sfondo,
-          foregroundColor: coloreTesto,
-          elevation: 0,
-          centerTitle: false,
-        ),
-        inputDecorationTheme: InputDecorationTheme(
-          filled: true,
-          fillColor: const Color(0xFFFFFDF7),
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 15,
-          ),
-          labelStyle: TextStyle(fontSize: 14, color: coloreSecondario),
-          hintStyle: TextStyle(fontSize: 14, color: coloreSecondario),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: BorderSide(color: coloreBordo, width: 1.4),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: BorderSide(color: coloreBordo, width: 1.4),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: BorderSide(color: colorePrimario, width: 2),
-          ),
-        ),
-      ),
+      title: 'Treeyes',
+      theme: _tema,
+      // La chiave cambia con la modalità demo: tutte le schermate ricaricano i dati.
       home: NavigazionePrincipale(
+        key: ValueKey(_demo),
         inglese: _inglese,
         onLinguaCambiata: (valore) => setState(() => _inglese = valore),
+        demo: _demo,
+        onDemoCambiata: _cambiaDemo,
       ),
     );
   }
@@ -179,22 +125,50 @@ class _ParkAppState extends State<ParkApp> {
 class NavigazionePrincipale extends StatefulWidget {
   final bool inglese;
   final ValueChanged<bool> onLinguaCambiata;
+  final bool demo;
+  final Future<void> Function(bool attiva)? onDemoCambiata;
 
   const NavigazionePrincipale({
     super.key,
     required this.inglese,
     required this.onLinguaCambiata,
+    this.demo = false,
+    this.onDemoCambiata,
   });
 
   @override
   State<NavigazionePrincipale> createState() => _NavigazionePrincipaleState();
 }
 
-class _NavigazionePrincipaleState extends State<NavigazionePrincipale> {
+class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
+    with SingleTickerProviderStateMixin {
+  /// Colore di ogni sezione, nello stesso ordine delle pagine.
+  static const List<Accento> _accenti = [
+    Accento.verde,
+    Accento.arancio,
+    Accento.blu,
+    Accento.giallo,
+    Accento.viola,
+  ];
+
   int _pagina = 0;
+  late final AnimationController _transizione = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 320),
+    value: 1,
+  );
+
+  @override
+  void dispose() {
+    _transizione.dispose();
+    super.dispose();
+  }
 
   void _vaiA(int indice) {
-    setState(() => _pagina = indice);
+    if (indice != _pagina) {
+      setState(() => _pagina = indice);
+      if (!MediaQuery.of(context).disableAnimations) _transizione.forward(from: 0);
+    }
     if (indice == 0) unawaited(_aggiornaStatoParco());
   }
 
@@ -207,20 +181,159 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale> {
     if (mounted) setState(() {});
   }
 
+  Widget _selettoreLingua(Copie s) {
+    return PopupMenuButton<bool>(
+      tooltip: s.t('Cambia lingua', 'Change language'),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      position: PopupMenuPosition.under,
+      onSelected: widget.onLinguaCambiata,
+      itemBuilder: (context) => [
+        CheckedPopupMenuItem<bool>(
+          value: false,
+          checked: !widget.inglese,
+          child: const Row(children: [Text('🇮🇹'), SizedBox(width: 10), Text('Italiano')]),
+        ),
+        CheckedPopupMenuItem<bool>(
+          value: true,
+          checked: widget.inglese,
+          child: const Row(children: [Text('🇬🇧'), SizedBox(width: 10), Text('English')]),
+        ),
+      ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: superficie,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: bordo),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.translate_rounded, size: 18, color: foresta),
+            const SizedBox(width: 6),
+            Text(
+              widget.inglese ? 'EN' : 'IT',
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: testo, letterSpacing: .4),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _apriModalitaDemo(Copie s) async {
+    var attiva = widget.demo;
+    var inCambio = false;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, aggiorna) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(22, 0, 22, 22),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  const IconaTonda(Icons.science_rounded, colore: lavanda, sfondo: lavandaChiaro, dimensione: 48),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Text(s.t('Modalità demo', 'Demo mode'), style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w900)),
+                  ),
+                ]),
+                const SizedBox(height: 14),
+                Text(
+                  s.t(
+                    'Prova l’app senza server: il Parco Sempione di Milano con segnalazioni, idee e avvisi simulati su una mappa vera. '
+                        'Quello che invii resta sul dispositivo e avanza di stato da solo.',
+                    'Try the app without a server: Milan’s Parco Sempione with simulated reports, ideas and notices on a real map. '
+                        'What you send stays on the device and progresses on its own.',
+                  ),
+                  style: const TextStyle(fontSize: 14.5, height: 1.45, color: testoSecondario),
+                ),
+                const SizedBox(height: 16),
+                Scheda(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  coloreBordo: attiva ? lavanda.withValues(alpha: .5) : null,
+                  child: SwitchListTile(
+                    value: attiva,
+                    activeThumbColor: Colors.white,
+                    activeTrackColor: lavanda,
+                    title: Text(s.t('Usa dati simulati', 'Use simulated data'), style: const TextStyle(fontWeight: FontWeight.w800)),
+                    subtitle: Text(attiva ? s.t('Attiva', 'On') : s.t('Dati reali dal server', 'Real data from the server')),
+                    secondary: inCambio
+                        ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.4))
+                        : Icon(attiva ? Icons.science_rounded : Icons.cloud_outlined, color: attiva ? lavanda : testoSecondario),
+                    onChanged: inCambio
+                        ? null
+                        : (valore) async {
+                            aggiorna(() {
+                              attiva = valore;
+                              inCambio = true;
+                            });
+                            await widget.onDemoCambiata?.call(valore);
+                            if (ctx.mounted) Navigator.of(ctx).pop();
+                          },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _pulsanteDemo(Copie s) {
+    final attiva = widget.demo;
+    return Tooltip(
+      message: s.t('Modalità demo', 'Demo mode'),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: () => _apriModalitaDemo(s),
+        child: AnimatedContainer(
+          duration: durata(context, 200),
+          padding: EdgeInsets.symmetric(horizontal: attiva ? 12 : 9, vertical: 8),
+          decoration: BoxDecoration(
+            color: attiva ? lavandaChiaro : superficie,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: attiva ? lavanda.withValues(alpha: .5) : bordo),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(attiva ? Icons.science_rounded : Icons.science_outlined, size: 18, color: attiva ? lavanda : testoSecondario),
+            if (attiva) ...[
+              const SizedBox(width: 6),
+              const Text('DEMO', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w900, color: lavanda, letterSpacing: .6)),
+            ],
+          ]),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = Copie(widget.inglese);
+    final accento = _accenti[_pagina];
     final pagine = [
-      SchermataInizio(s: s, onSegnalazioni: () => _vaiA(1)),
+      SchermataInizio(
+        s: s,
+        onSegnalazioni: () => _vaiA(1),
+        onIdee: () => _vaiA(3),
+        onAvvisi: () => _vaiA(4),
+      ),
       SchermataSegnalazione(s: s),
       SchermataSegnalazioni(s: s),
       SchermataIdee(s: s),
       SchermataAvvisi(s: s),
     ];
+    final curva = CurvedAnimation(parent: _transizione, curve: Curves.easeOutCubic);
 
     return Scaffold(
       appBar: AppBar(
-        titleSpacing: 18,
+        titleSpacing: 20,
+        toolbarHeight: 64,
         title: Row(
           children: [
             Container(
@@ -228,515 +341,137 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale> {
               height: 38,
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
-                  colors: [verde, verdePrincipale],
+                  colors: [forestaScura, foglia],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
-                borderRadius: BorderRadius.circular(13),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: const [
+                  BoxShadow(color: Color(0x3317694A), blurRadius: 10, offset: Offset(0, 4)),
+                ],
               ),
-              child: const Icon(
-                Icons.park_rounded,
-                color: Colors.white,
-                size: 27,
-              ),
+              child: const Icon(Icons.park_rounded, color: Colors.white, size: 22),
             ),
-            const SizedBox(width: 9),
-            const Text(
-              'Tryees',
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w800,
-                color: verde,
+            const SizedBox(width: 11),
+            const Flexible(
+              child: Text(
+                'Treeyes',
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  color: forestaScura,
+                  letterSpacing: -.4,
+                ),
               ),
             ),
           ],
         ),
         actions: [
-          PopupMenuButton<bool>(
-            tooltip: s.t('Cambia lingua', 'Change language'),
-            icon: const Icon(Icons.language_rounded, size: 25),
-            onSelected: widget.onLinguaCambiata,
-            itemBuilder: (context) => [
-              CheckedPopupMenuItem<bool>(
-                value: false,
-                checked: !widget.inglese,
-                child: const Row(
-                  children: [
-                    Text('🇮🇹'),
-                    SizedBox(width: 10),
-                    Text('Italiano'),
-                  ],
-                ),
-              ),
-              CheckedPopupMenuItem<bool>(
-                value: true,
-                checked: widget.inglese,
-                child: const Row(
-                  children: [
-                    Text('🇬🇧'),
-                    SizedBox(width: 10),
-                    Text('English'),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(width: 4),
+          if (widget.onDemoCambiata != null) ...[
+            _pulsanteDemo(s),
+            const SizedBox(width: 8),
+          ],
+          _selettoreLingua(s),
+          const SizedBox(width: 16),
         ],
       ),
       body: SafeArea(
         top: false,
-        child: IndexedStack(index: _pagina, children: pagine),
+        child: FadeTransition(
+          opacity: curva,
+          child: SlideTransition(
+            position: Tween<Offset>(begin: const Offset(0, .02), end: Offset.zero).animate(curva),
+            child: IndexedStack(index: _pagina, children: pagine),
+          ),
+        ),
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _pagina,
-        onDestinationSelected: _vaiA,
-        height: 80,
-        backgroundColor: const Color(0xFFC8DCC5),
-        indicatorColor: const Color(0xFFDCE6D3),
-        destinations: [
-          NavigationDestination(
-            icon: const Icon(Icons.home_outlined),
-            selectedIcon: const Icon(Icons.home_rounded, color: verde),
-            label: s.t('Inizio', 'Home'),
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.add_a_photo_outlined),
-            selectedIcon: const Icon(Icons.add_a_photo_rounded, color: verdeMedio),
-            label: s.t('Segnala', 'Report'),
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.list_alt_outlined),
-            selectedIcon: const Icon(Icons.list_alt_rounded, color: verdeScuro),
-            label: s.t('Elenco', 'Reports'),
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.lightbulb_outline_rounded),
-            selectedIcon: const Icon(
-              Icons.lightbulb_rounded,
-              color: verdeIntermedio,
+      bottomNavigationBar: DecoratedBox(
+        decoration: const BoxDecoration(
+          color: superficie,
+          border: Border(top: BorderSide(color: bordo)),
+          boxShadow: [BoxShadow(color: Color(0x0F12261B), blurRadius: 20, offset: Offset(0, -4))],
+        ),
+        child: NavigationBarTheme(
+          // L'indicatore prende il colore della sezione aperta.
+          data: NavigationBarTheme.of(context).copyWith(
+            indicatorColor: accento.tinta,
+            labelTextStyle: WidgetStateProperty.resolveWith(
+              (stati) => TextStyle(
+                fontSize: 12,
+                fontWeight: stati.contains(WidgetState.selected) ? FontWeight.w800 : FontWeight.w600,
+                color: stati.contains(WidgetState.selected) ? accento.forte : testoSecondario,
+              ),
             ),
-            label: s.t('Idee', 'Ideas'),
+            iconTheme: WidgetStateProperty.resolveWith(
+              (stati) => IconThemeData(
+                size: 24,
+                color: stati.contains(WidgetState.selected) ? accento.forte : testoSecondario,
+              ),
+            ),
           ),
-          NavigationDestination(
-            icon: const Icon(Icons.notifications_none_rounded),
-            selectedIcon: const Icon(Icons.notifications_rounded, color: verdeScuro),
-            label: s.t('Avvisi', 'Notices'),
+          child: NavigationBar(
+            selectedIndex: _pagina,
+            onDestinationSelected: _vaiA,
+            destinations: [
+              NavigationDestination(
+                icon: const Icon(Icons.home_outlined),
+                selectedIcon: const Icon(Icons.home_rounded),
+                label: s.t('Inizio', 'Home'),
+              ),
+              NavigationDestination(
+                icon: const Icon(Icons.add_a_photo_outlined),
+                selectedIcon: const Icon(Icons.add_a_photo_rounded),
+                label: s.t('Segnala', 'Report'),
+              ),
+              NavigationDestination(
+                icon: const Icon(Icons.list_alt_outlined),
+                selectedIcon: const Icon(Icons.list_alt_rounded),
+                label: s.t('Elenco', 'Reports'),
+              ),
+              NavigationDestination(
+                icon: const Icon(Icons.lightbulb_outline_rounded),
+                selectedIcon: const Icon(Icons.lightbulb_rounded),
+                label: s.t('Idee', 'Ideas'),
+              ),
+              NavigationDestination(
+                icon: const Icon(Icons.notifications_none_rounded),
+                selectedIcon: const Icon(Icons.notifications_rounded),
+                label: s.t('Avvisi', 'Notices'),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 }
 
-class ContenitorePagina extends StatelessWidget {
-  final Widget child;
-  const ContenitorePagina({super.key, required this.child});
-
-  @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) => Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 760),
-        child: SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(
-            constraints.maxWidth < 380 ? 14 : 20,
-            12,
-            constraints.maxWidth < 380 ? 14 : 20,
-            28,
-          ),
-          child: child,
-        ),
-      ),
-    ),
-  );
-}
-
-class TitoloPagina extends StatelessWidget {
-  final String titolo;
-  final String descrizione;
-  final Color colore;
-  const TitoloPagina({
-    super.key,
-    required this.titolo,
-    required this.descrizione,
-    this.colore = verdeScuro,
-  });
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 19),
-    child: Semantics(
-      header: true,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            titolo,
-            style: const TextStyle(
-              color: testo,
-              fontSize: 27,
-              height: 1.18,
-              fontWeight: FontWeight.w900,
-              letterSpacing: -.35,
-            ),
-          ),
-          const SizedBox(height: 9),
-          Container(
-            width: 42,
-            height: 5,
-            decoration: BoxDecoration(
-              color: colore,
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
-          const SizedBox(height: 11),
-          Text(
-            descrizione,
-            style: const TextStyle(
-              fontSize: 15,
-              height: 1.5,
-              color: testoSecondario,
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
-}
-
-class Scheda extends StatelessWidget {
-  final Widget child;
-  final EdgeInsets padding;
-  final Color colore;
-  final Color? coloreBordo;
-
-  const Scheda({
-    super.key,
-    required this.child,
-    this.padding = const EdgeInsets.all(16),
-    this.colore = const Color(0xFFC8DCC5),
-    this.coloreBordo,
-  });
-
-  @override
-  Widget build(BuildContext context) => Container(
-    width: double.infinity,
-    padding: padding,
-    decoration: BoxDecoration(
-      color: colore,
-      borderRadius: BorderRadius.circular(18),
-      border: Border.all(
-        color: MediaQuery.highContrastOf(context)
-            ? Colors.black
-            : coloreBordo ?? bordo,
-        width: MediaQuery.highContrastOf(context) ? 1.5 : 1,
-      ),
-      boxShadow: const [
-        BoxShadow(
-          color: Color(0x0817271D),
-          blurRadius: 8,
-          offset: Offset(0, 2),
-        ),
-      ],
-    ),
-    child: child,
-  );
-}
-
-class PulsanteAzione extends StatelessWidget {
-  final String testo;
-  final IconData icona;
-  final Color colore;
-  final VoidCallback? onPressed;
-  final bool outlined;
-
-  const PulsanteAzione({
-    super.key,
-    required this.testo,
-    required this.icona,
-    required this.colore,
-    this.onPressed,
-    this.outlined = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final contenuto = Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(icona, size: 20),
-        const SizedBox(width: 9),
-        Flexible(
-          child: Text(
-            testo,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-          ),
-        ),
-      ],
-    );
-    return SizedBox(
-      width: double.infinity,
-      child: outlined
-          ? OutlinedButton(
-              style: OutlinedButton.styleFrom(
-                foregroundColor: colore,
-                side: BorderSide(color: colore, width: 1.5),
-                minimumSize: const Size(0, 54),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-              ),
-              onPressed: onPressed,
-              child: contenuto,
-            )
-          : FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: colore,
-                foregroundColor: Colors.white,
-                minimumSize: const Size(0, 54),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-              ),
-              onPressed: onPressed,
-              child: contenuto,
-            ),
-    );
-  }
-}
-
-class _MappaIllustrativa extends StatelessWidget {
-  final Copie s;
-
-  const _MappaIllustrativa({required this.s});
-
-  @override
-  Widget build(BuildContext context) => ClipRRect(
-    borderRadius: BorderRadius.circular(14),
-    child: SizedBox(
-      height: 190,
-      width: double.infinity,
-      child: CustomPaint(
-        painter: _PittoreMappa(
-          coloreArea: const Color(0xFFEAF0E3),
-          coloreAlberi: const Color(0xFF315C45),
-          coloreSentiero: const Color(0xFF718B65),
-          coloreAcqua: const Color(0xFF718B65),
-        ),
-        child: Stack(
-          children: [
-            Positioned(
-              left: 18,
-              top: 16,
-              child: _EtichettaMappa(
-                icona: Icons.park_rounded,
-                etichetta: s.t('Ingresso', 'Entrance'),
-              ),
-            ),
-            Positioned(
-              right: 16,
-              top: 72,
-              child: _EtichettaMappa(
-                icona: Icons.water_drop_rounded,
-                etichetta: s.t('Laghetto', 'Pond'),
-                colore: const Color(0xFF315C45),
-              ),
-            ),
-            Positioned(
-              left: 40,
-              bottom: 17,
-              child: _EtichettaMappa(
-                icona: Icons.sports_esports_rounded,
-                etichetta: s.t('Area giochi', 'Playground'),
-                colore: verdeMedio,
-              ),
-            ),
-            Positioned(
-              right: 16,
-              bottom: 14,
-              child: Container(
-                padding: const EdgeInsets.all(7),
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.navigation_rounded,
-                  size: 18,
-                  color: verde,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
-}
-
-class _EtichettaMappa extends StatelessWidget {
-  final IconData icona;
-  final String etichetta;
-  final Color colore;
-
-  const _EtichettaMappa({
-    required this.icona,
-    required this.etichetta,
-    this.colore = verde,
-  });
-
-  @override
-  Widget build(BuildContext context) => DecoratedBox(
-    decoration: BoxDecoration(
-      color: const Color(0xF0FFFDF7),
-      borderRadius: BorderRadius.circular(20),
-      boxShadow: const [
-        BoxShadow(
-          color: Color(0x1A17271D),
-          blurRadius: 8,
-          offset: Offset(0, 2),
-        ),
-      ],
-    ),
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icona, color: colore, size: 16),
-          const SizedBox(width: 5),
-          Text(
-            etichetta,
-            style: const TextStyle(
-              color: testo,
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
-}
-
-class _PittoreMappa extends CustomPainter {
-  final Color coloreArea;
-  final Color coloreAlberi;
-  final Color coloreSentiero;
-  final Color coloreAcqua;
-
-  const _PittoreMappa({
-    required this.coloreArea,
-    required this.coloreAlberi,
-    required this.coloreSentiero,
-    required this.coloreAcqua,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    canvas.save();
-    final scalaX = size.width / 360;
-    final scalaY = size.height / 190;
-    canvas.scale(scalaX, scalaY);
-    const larghezza = 360.0;
-    const altezza = 190.0;
-
-    canvas.drawRect(
-      Offset.zero & Size(larghezza, altezza),
-      Paint()..color = coloreArea,
-    );
-
-    final prato = Paint()..color = const Color(0xFF8FAF91);
-    canvas.drawOval(Rect.fromLTWH(25, 30, 108, 65), prato);
-    canvas.drawOval(Rect.fromLTWH(186, 117, 130, 54), prato);
-
-    final stagno = Path()
-      ..moveTo(larghezza - 92, 0)
-      ..quadraticBezierTo(larghezza - 48, 23, larghezza, 14)
-      ..lineTo(larghezza, 57)
-      ..quadraticBezierTo(larghezza - 45, 50, larghezza - 86, 28)
-      ..close();
-    canvas.drawPath(stagno, Paint()..color = coloreAcqua);
-
-    final sentiero = Path()
-      ..moveTo(-8, altezza * .76)
-      ..cubicTo(72, altezza * .68, 84, altezza * .42, 151, altezza * .48)
-      ..cubicTo(225, altezza * .55, 207, altezza * .81, 282, altezza * .67)
-      ..cubicTo(
-        319,
-        altezza * .60,
-        larghezza - 16,
-        altezza * .48,
-        larghezza + 12,
-        altezza * .51,
-      );
-    canvas.drawPath(
-      sentiero,
-      Paint()
-        ..color = coloreSentiero
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 13
-        ..strokeCap = StrokeCap.round,
-    );
-    canvas.drawPath(
-      sentiero,
-      Paint()
-        ..color = const Color(0xFF8FAF91)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.2
-        ..strokeCap = StrokeCap.round,
-    );
-
-    const alberi = <Offset>[
-      Offset(31, 119),
-      Offset(62, 144),
-      Offset(93, 112),
-      Offset(126, 128),
-      Offset(164, 34),
-      Offset(193, 65),
-      Offset(229, 32),
-      Offset(272, 95),
-      Offset(305, 110),
-      Offset(145, 161),
-      Offset(222, 157),
-      Offset(321, 42),
-    ];
-    for (final albero in alberi) {
-      final posizione = albero;
-      canvas.drawCircle(posizione, 7, Paint()..color = coloreAlberi);
-      canvas.drawCircle(
-        posizione.translate(-2, -2),
-        2.2,
-        Paint()..color = const Color(0xFF718B65),
-      );
-    }
-
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(covariant _PittoreMappa oldDelegate) =>
-      coloreArea != oldDelegate.coloreArea ||
-      coloreAlberi != oldDelegate.coloreAlberi ||
-      coloreSentiero != oldDelegate.coloreSentiero ||
-      coloreAcqua != oldDelegate.coloreAcqua;
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// Inizio
+// ─────────────────────────────────────────────────────────────────────────────
 
 class SchermataInizio extends StatefulWidget {
   final Copie s;
   final VoidCallback onSegnalazioni;
+  final VoidCallback? onIdee;
+  final VoidCallback? onAvvisi;
 
-  const SchermataInizio({super.key, required this.s, required this.onSegnalazioni});
+  const SchermataInizio({
+    super.key,
+    required this.s,
+    required this.onSegnalazioni,
+    this.onIdee,
+    this.onAvvisi,
+  });
 
   @override
   State<SchermataInizio> createState() => _SchermataInizioState();
 }
 
 class _SchermataInizioState extends State<SchermataInizio> {
+  bool _aggiornamento = true;
+
   @override
   void initState() {
     super.initState();
@@ -746,162 +481,299 @@ class _SchermataInizioState extends State<SchermataInizio> {
   Future<void> _aggiornaStato() async {
     try {
       await CitizenApi.instance.getParkStatus();
-      if (mounted) setState(() {});
     } catch (_) {
-      if (mounted) setState(() {});
+      // Resta lo stato memorizzato.
     }
+    if (mounted) setState(() => _aggiornamento = false);
+  }
+
+  void _aggiornaManualmente() {
+    setState(() => _aggiornamento = true);
+    unawaited(_aggiornaStato());
+  }
+
+  Widget _schedaStato(Copie s) {
+    final statoBackend = CitizenApi.instance.cachedParkStatus;
+    final stato = _statoDaBackend(statoBackend);
+    final descrizioneStato = _descrizioneStatoDaBackend(statoBackend, s);
+    final alta = MediaQuery.highContrastOf(context);
+    final colori = alta ? [stato.gradiente.first, stato.gradiente.first] : stato.gradiente;
+
+    return Semantics(
+      container: true,
+      label: s.t('Stato del parco', 'Park status'),
+      value: s.t(stato.italiano, stato.english),
+      child: AnimatedContainer(
+        duration: durata(context, 500),
+        curve: Curves.easeOutCubic,
+        width: double.infinity,
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(colors: colori, begin: Alignment.topLeft, end: Alignment.bottomRight),
+          borderRadius: BorderRadius.circular(28),
+          boxShadow: [
+            BoxShadow(color: colori.last.withValues(alpha: .30), blurRadius: 28, offset: const Offset(0, 12)),
+          ],
+        ),
+        child: Stack(
+          children: [
+            // Decorazioni: un grande albero sfumato e un cerchio di luce.
+            Positioned(
+              right: -26,
+              bottom: -34,
+              child: Icon(Icons.park_rounded, size: 170, color: Colors.white.withValues(alpha: .10)),
+            ),
+            Positioned(
+              right: 50,
+              top: -60,
+              child: Container(
+                width: 140,
+                height: 140,
+                decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: .07)),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(22, 18, 14, 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: .16),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(stato.icona, size: 16, color: Colors.white),
+                            const SizedBox(width: 6),
+                            Text(
+                              s.t('Stato del parco', 'Park status'),
+                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        tooltip: s.t('Aggiorna stato', 'Refresh status'),
+                        onPressed: _aggiornamento ? null : _aggiornaManualmente,
+                        style: IconButton.styleFrom(
+                          backgroundColor: Colors.white.withValues(alpha: .16),
+                          disabledBackgroundColor: Colors.white.withValues(alpha: .10),
+                        ),
+                        icon: _aggiornamento
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              )
+                            : const Icon(Icons.refresh_rounded, size: 21, color: Colors.white),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  AnimatedSwitcher(
+                    duration: durata(context, 300),
+                    child: Text(
+                      s.t(stato.italiano, stato.english),
+                      key: ValueKey(stato),
+                      style: const TextStyle(
+                        fontSize: 32,
+                        height: 1.1,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                        letterSpacing: -.8,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Padding(
+                    padding: const EdgeInsets.only(right: 60),
+                    child: Text(
+                      descrizioneStato,
+                      style: TextStyle(fontSize: 15, height: 1.45, color: Colors.white.withValues(alpha: .92)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final s = widget.s;
-    final statoBackend = CitizenApi.instance.cachedParkStatus;
-    final stato = _statoDaBackend(statoBackend);
-    final descrizioneStato = _descrizioneStatoDaBackend(statoBackend, s);
-    final testoCard = MediaQuery.highContrastOf(context) ? Colors.black : testo;
-    final testoSecondarioCard = MediaQuery.highContrastOf(context)
-        ? Colors.black
-        : testoSecondario;
 
     return ContenitorePagina(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          TitoloPagina(
-            titolo: s.t('Esplora il parco', 'Explore the park'),
-            descrizione: s.t(
-              'Orientati, scopri lo stato del parco e resta aggiornato.',
-              'Find your way, check the park status and stay up to date.',
-            ),
-            colore: verde,
-          ),
-          Scheda(
-            colore: const Color(0xFFC8DCC5),
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Icon(Icons.map_outlined, color: verde, size: 22),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        s.t('Mappa del parco', 'Park map'),
-                        style: TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w800,
-                          color: testoCard,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Semantics(
-                  image: true,
-                  label: s.t(
-                    'Mappa illustrativa del parco con sentieri, ingresso, laghetto e area giochi.',
-                    'Illustrated park map with paths, entrance, pond and playground.',
-                  ),
-                  child: _MappaIllustrativa(s: s),
-                ),
-                const SizedBox(height: 7),
-                Text(
-                  s.t('Mappa illustrativa', 'Illustrative map'),
-                  style: TextStyle(fontSize: 13, color: testoSecondarioCard),
-                ),
-                const SizedBox(height: 14),
-                Semantics(
-                  container: true,
-                  label: s.t('Stato del parco', 'Park status'),
-                  value: s.t(stato.italiano, stato.english),
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(13),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFB2CBAE),
-                      borderRadius: BorderRadius.circular(15),
-                      border: Border.all(color: const Color(0xFF8FAF91)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(Icons.eco_outlined, color: stato.colore, size: 23),
-                            const SizedBox(width: 9),
-                            Expanded(
-                              child: Text(
-                                s.t('Stato del parco', 'Park status'),
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w800,
-                                  color: testoCard,
-                                ),
-                              ),
-                            ),
-                            Text(
-                              s.t(stato.italiano, stato.english),
-                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: stato.colore),
-                            ),
-                            IconButton(tooltip: s.t('Aggiorna stato', 'Refresh status'), onPressed: _aggiornaStato, icon: const Icon(Icons.refresh_rounded, size: 19, color: verde)),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        Semantics(
-                          label: s.t(
-                            'Indicatore illustrativo dello stato del parco',
-                            'Illustrative park status indicator',
-                          ),
-                          value: s.t(stato.italiano, stato.english),
-                          child: TweenAnimationBuilder<double>(
-                            tween: Tween<double>(begin: 0, end: stato.progresso),
-                            duration: MediaQuery.of(context).disableAnimations
-                                ? Duration.zero
-                                : const Duration(milliseconds: 700),
-                            curve: Curves.easeOutCubic,
-                            builder: (context, progresso, child) => ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: LinearProgressIndicator(
-                                value: progresso,
-                                minHeight: 9,
-                                color: stato.colore,
-                                backgroundColor: MediaQuery.highContrastOf(context)
-                                    ? testoSecondario
-                                    : const Color(0xFF8FAF91),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          descrizioneStato,
-                          style: TextStyle(
-                            fontSize: 13,
-                            height: 1.4,
-                            color: testoSecondarioCard,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
+          Appare(
+            child: TitoloPagina(
+              titolo: s.t('Esplora il parco', 'Explore the park'),
+              descrizione: s.t(
+                'Orientati, scopri lo stato del parco e resta aggiornato.',
+                'Find your way, check the park status and stay up to date.',
+              ),
             ),
           ),
-          const SizedBox(height: 16),
-          PulsanteAzione(
-            testo: s.t('Segnala un problema', 'Report a problem'),
-            icona: Icons.add_location_alt_outlined,
-            colore: verdeScuro,
-            onPressed: widget.onSegnalazioni,
+          Appare(indice: 1, child: _schedaStato(s)),
+          const SizedBox(height: 18),
+          Appare(
+            indice: 2,
+            child: _TesseraAzione(
+              icona: Icons.add_location_alt_rounded,
+              titolo: s.t('Segnala un problema', 'Report a problem'),
+              sottotitolo: s.t('Foto, posizione e invio in tre passi.', 'Photo, location and submit in three steps.'),
+              accento: Accento.arancio,
+              piena: true,
+              onTap: widget.onSegnalazioni,
+            ),
+          ),
+          const SizedBox(height: 28),
+          Appare(indice: 3, child: TitoloSezione(s.t('Scopri di più', 'Discover more'))),
+          Appare(
+            indice: 4,
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: _TesseraAzione(
+                      icona: Icons.lightbulb_rounded,
+                      titolo: s.t('Proponi un’idea', 'Share an idea'),
+                      sottotitolo: s.t('Migliora il parco', 'Improve the park'),
+                      accento: Accento.giallo,
+                      verticale: true,
+                      onTap: widget.onIdee,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _TesseraAzione(
+                      icona: Icons.notifications_rounded,
+                      titolo: s.t('Avvisi del parco', 'Park notices'),
+                      sottotitolo: s.t('Novità e lavori', 'News and works'),
+                      accento: Accento.viola,
+                      verticale: true,
+                      onTap: widget.onAvvisi,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ],
       ),
     );
   }
 }
+
+/// Riquadro toccabile della home: pieno (azione principale) o tenue.
+class _TesseraAzione extends StatelessWidget {
+  final IconData icona;
+  final String titolo;
+  final String sottotitolo;
+  final Accento accento;
+  final VoidCallback? onTap;
+  final bool piena;
+  final bool verticale;
+
+  const _TesseraAzione({
+    required this.icona,
+    required this.titolo,
+    required this.sottotitolo,
+    required this.accento,
+    required this.onTap,
+    this.piena = false,
+    this.verticale = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final raggio = BorderRadius.circular(24);
+    final coloreTitolo = piena ? Colors.white : testo;
+    final coloreSotto = piena ? Colors.white.withValues(alpha: .88) : testoSecondario;
+
+    final icon = Container(
+      width: 48,
+      height: 48,
+      decoration: BoxDecoration(
+        color: piena ? Colors.white.withValues(alpha: .18) : superficie,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Icon(icona, color: piena ? Colors.white : accento.forte, size: 26),
+    );
+    final testi = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(titolo, style: TextStyle(fontSize: piena ? 18 : 15.5, fontWeight: FontWeight.w800, color: coloreTitolo, height: 1.2)),
+        const SizedBox(height: 3),
+        Text(sottotitolo, style: TextStyle(fontSize: 13.5, height: 1.35, color: coloreSotto)),
+      ],
+    );
+
+    return Semantics(
+      button: true,
+      label: titolo,
+      hint: sottotitolo,
+      onTap: onTap,
+      excludeSemantics: true,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: raggio,
+          gradient: piena
+              ? const LinearGradient(
+                  colors: [Color(0xFFC0361B), Color(0xFFE8663D)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                )
+              : null,
+          color: piena ? null : accento.tinta,
+          border: piena ? null : Border.all(color: accento.base.withValues(alpha: .22)),
+          boxShadow: piena
+              ? const [BoxShadow(color: Color(0x40E4572E), blurRadius: 22, offset: Offset(0, 10))]
+              : null,
+        ),
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: raggio,
+            child: Padding(
+              padding: EdgeInsets.all(verticale ? 16 : 18),
+              child: verticale
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [icon, const SizedBox(height: 14), testi],
+                    )
+                  : Row(
+                      children: [
+                        icon,
+                        const SizedBox(width: 14),
+                        Expanded(child: testi),
+                        Icon(Icons.arrow_forward_rounded, color: coloreTitolo),
+                      ],
+                    ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Nuova segnalazione
+// ─────────────────────────────────────────────────────────────────────────────
 
 class SchermataSegnalazione extends StatefulWidget {
   final Copie s;
@@ -926,40 +798,35 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
       nomeIt: 'Cestini e rifiuti',
       nomeEn: 'Bins and waste',
       icona: Icons.delete_outline_rounded,
-      colore: verdeMedio,
-      sfondo: verdePallido,
+      accento: Accento.blu,
     ),
     _CategoriaSegnalazione(
       id: 'green',
       nomeIt: 'Verde e piante',
       nomeEn: 'Trees and plants',
       icona: Icons.park_outlined,
-      colore: verde,
-      sfondo: verdeChiaro,
+      accento: Accento.verde,
     ),
     _CategoriaSegnalazione(
       id: 'furniture',
       nomeIt: 'Arredi e panchine',
       nomeEn: 'Benches and furniture',
       icona: Icons.chair_outlined,
-      colore: verdeIntermedio,
-      sfondo: verdePallido,
+      accento: Accento.arancio,
     ),
     _CategoriaSegnalazione(
       id: 'lighting',
       nomeIt: 'Illuminazione',
       nomeEn: 'Lighting',
       icona: Icons.lightbulb_outline_rounded,
-      colore: verdeAccento,
-      sfondo: verdePallido,
+      accento: Accento.giallo,
     ),
     _CategoriaSegnalazione(
       id: 'other',
       nomeIt: 'Altro',
       nomeEn: 'Other',
       icona: Icons.more_horiz_rounded,
-      colore: verdeIntermedio,
-      sfondo: verdePallido,
+      accento: Accento.viola,
     ),
   ];
 
@@ -1023,6 +890,8 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
   }
 
   XFile? _foto;
+  /// Lettura dell'anteprima fatta una sola volta, così non lampeggia a ogni aggiornamento.
+  Future<Uint8List>? _anteprimaFoto;
   Position? _posizione;
   bool _caricamentoGps = false;
   bool _invioInCorso = false;
@@ -1031,14 +900,30 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
     try {
       final file = await ImagePicker().pickImage(source: source, imageQuality: 82, maxWidth: 1600);
       if (!mounted || file == null) return;
-      setState(() { _foto = file; _errore = null; });
+      setState(() { _foto = file; _anteprimaFoto = file.readAsBytes(); _errore = null; });
     } catch (e) {
       _mostraErrore('Impossibile aprire la fotocamera o la galleria: $e');
     }
   }
 
+  void _rimuoviFoto() => setState(() { _foto = null; _anteprimaFoto = null; });
+
+  /// Cambia a ogni rilevamento: la mappa si ricrea centrata sul nuovo punto.
+  int _rilevamenti = 0;
+
+  Position _posizioneDa(double lat, double lon) => Position(
+        latitude: lat, longitude: lon, timestamp: DateTime.now(), accuracy: 5, altitude: 120,
+        altitudeAccuracy: 0, heading: 0, headingAccuracy: 0, speed: 0, speedAccuracy: 0, isMocked: true,
+      );
+
   Future<void> _rilevaPosizione() async {
     setState(() { _caricamentoGps = true; _errore = null; });
+    if (CitizenApi.instance.demoMode) {
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+      final p = CitizenApi.instance.posizioneSimulata();
+      if (mounted) setState(() { _posizione = _posizioneDa(p.lat, p.lon); _rilevamenti++; _caricamentoGps = false; });
+      return;
+    }
     try {
       final enabled = await Geolocator.isLocationServiceEnabled();
       if (!enabled) throw Exception('Attiva la posizione GPS sul dispositivo.');
@@ -1051,7 +936,7 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
         locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, timeLimit: Duration(seconds: 20)),
       );
       if (!mounted) return;
-      setState(() => _posizione = position);
+      setState(() { _posizione = position; _rilevamenti++; });
     } catch (e) {
       if (mounted) _mostraErrore(e.toString().replaceFirst('Exception: ', ''));
     } finally {
@@ -1089,16 +974,49 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
         context: context,
         barrierDismissible: false,
         builder: (dialogContext) => AlertDialog(
-          icon: const CircleAvatar(radius: 32, backgroundColor: verdeChiaro, child: Icon(Icons.check_rounded, color: verde, size: 38)),
+          icon: const CircleAvatar(radius: 34, backgroundColor: menta, child: Icon(Icons.check_rounded, color: foresta, size: 40)),
           title: Text(s.t('Segnalazione inviata', 'Report submitted')),
-          content: Text('${s.t('Codice', 'Code')}: ${result['code'] ?? result['id']}\n${result['status_label'] ?? ''}'),
-          actions: [FilledButton(onPressed: () => Navigator.of(dialogContext).pop(), child: Text(s.t('Ho capito', 'Done')))],
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                s.t('Grazie! Il tuo aiuto rende il parco un posto migliore.', 'Thank you! Your help makes the park a better place.'),
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: testoSecondario, height: 1.4),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(color: sfondo, borderRadius: BorderRadius.circular(14)),
+                child: Column(
+                  children: [
+                    Text(
+                      '${s.t('Codice', 'Code')}: ${result['code'] ?? result['id']}',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                    ),
+                    if ((result['status_label'] ?? '').toString().isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text('${result['status_label']}', style: const TextStyle(color: testoSecondario)),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(onPressed: () => Navigator.of(dialogContext).pop(), child: Text(s.t('Ho capito', 'Done'))),
+            ),
+          ],
         ),
       );
       if (!mounted) return;
       setState(() {
         _passaggio = 0; _categoria = null; _gravita = 'media';
-        _descrizione.clear(); _errore = null; _foto = null; _posizione = null;
+        _descrizione.clear(); _errore = null; _foto = null; _anteprimaFoto = null; _posizione = null;
       });
     } catch (e) {
       if (mounted) _mostraErrore(e.toString().replaceFirst('Exception: ', ''));
@@ -1107,12 +1025,51 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
     }
   }
 
+  // ── Indicatore dei passaggi ────────────────────────────────────────────────
+
   Widget _indicatorePassaggi(Copie s) {
     final nomi = [
       s.t('Problema', 'Issue'),
       s.t('Foto e luogo', 'Photo and place'),
       s.t('Riepilogo', 'Review'),
     ];
+
+    Widget linea(bool attiva) => AnimatedContainer(
+          duration: durata(context, 300),
+          height: 3,
+          decoration: BoxDecoration(
+            color: attiva ? foresta : bordo,
+            borderRadius: BorderRadius.circular(3),
+          ),
+        );
+
+    Widget cerchio(int i) {
+      final completato = i < _passaggio;
+      final corrente = i == _passaggio;
+      return AnimatedContainer(
+        duration: durata(context, 300),
+        width: 34,
+        height: 34,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: completato || corrente ? foresta : superficie,
+          border: Border.all(color: completato || corrente ? foresta : bordoForte, width: 1.5),
+          boxShadow: corrente ? [const BoxShadow(color: Color(0x5517694A), blurRadius: 0, spreadRadius: 4)] : null,
+        ),
+        child: Center(
+          child: completato
+              ? const Icon(Icons.check_rounded, size: 19, color: Colors.white)
+              : Text(
+                  '${i + 1}',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: corrente ? Colors.white : testoSecondario,
+                  ),
+                ),
+        ),
+      );
+    }
 
     return Semantics(
       container: true,
@@ -1121,45 +1078,74 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
         'Passaggio ${_passaggio + 1} di 3: ${nomi[_passaggio]}',
         'Step ${_passaggio + 1} of 3: ${nomi[_passaggio]}',
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: List.generate(
-              3,
-              (indice) => Expanded(
-                child: Container(
-                  height: 7,
-                  margin: EdgeInsets.only(right: indice == 2 ? 0 : 7),
-                  decoration: BoxDecoration(
-                    color: indice <= _passaggio ? verde : bordo,
-                    borderRadius: BorderRadius.circular(20),
+      child: ExcludeSemantics(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: List.generate(
+            3,
+            (i) => Expanded(
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(child: i == 0 ? const SizedBox() : linea(i <= _passaggio)),
+                      const SizedBox(width: 6),
+                      cerchio(i),
+                      const SizedBox(width: 6),
+                      Expanded(child: i == 2 ? const SizedBox() : linea(i < _passaggio)),
+                    ],
                   ),
-                ),
+                  const SizedBox(height: 8),
+                  Text(
+                    nomi[i],
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      height: 1.2,
+                      fontWeight: i == _passaggio ? FontWeight.w800 : FontWeight.w600,
+                      color: i == _passaggio ? foresta : i < _passaggio ? testo : testoSecondario,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
-          const SizedBox(height: 9),
-          Text(
-            s.t(
-              'PASSAGGIO ${_passaggio + 1} DI 3 · ${nomi[_passaggio].toUpperCase()}',
-              'STEP ${_passaggio + 1} OF 3 · ${nomi[_passaggio].toUpperCase()}',
-            ),
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w800,
-              color: verde,
-              letterSpacing: .35,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
 
+  Widget _intestazionePassaggio(String titolo, String descrizione) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(titolo, style: const TextStyle(fontSize: 22, height: 1.2, fontWeight: FontWeight.w800, color: testo, letterSpacing: -.3)),
+          const SizedBox(height: 6),
+          Text(descrizione, style: const TextStyle(fontSize: 15, height: 1.45, color: testoSecondario)),
+          const SizedBox(height: 18),
+        ],
+      );
+
+  Widget _etichettaCampo(String testoCampo, [String? aiuto]) => Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(testoCampo, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: testo)),
+            if (aiuto != null) ...[
+              const SizedBox(height: 3),
+              Text(aiuto, style: const TextStyle(fontSize: 13, height: 1.4, color: testoSecondario)),
+            ],
+          ],
+        ),
+      );
+
+  // ── Passaggio 1: problema ──────────────────────────────────────────────────
+
   Widget _schedaCategoria(_CategoriaSegnalazione categoria, Copie s) {
     final selezionata = _categoria == categoria.id;
     final nome = s.t(categoria.nomeIt, categoria.nomeEn);
+    final accento = categoria.accento;
 
     void selezionaCategoria() {
       setState(() {
@@ -1179,54 +1165,60 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
       ),
       onTap: selezionaCategoria,
       child: ExcludeSemantics(
-        child: Material(
-          color: selezionata ? categoria.sfondo : superficieVerde,
-          borderRadius: BorderRadius.circular(18),
-          child: InkWell(
-            onTap: selezionaCategoria,
-            borderRadius: BorderRadius.circular(18),
-            child: AnimatedContainer(
-              duration: MediaQuery.of(context).disableAnimations
-                  ? Duration.zero
-                  : const Duration(milliseconds: 160),
-              constraints: const BoxConstraints(minHeight: 112),
-              padding: const EdgeInsets.all(13),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(
-                  color: selezionata ? categoria.colore : bordo,
-                  width: selezionata ? 2.5 : 1,
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      Icon(categoria.icona, color: categoria.colore, size: 30),
-                      const Spacer(),
-                      if (selezionata)
-                        Icon(
-                          Icons.check_circle_rounded,
-                          color: categoria.colore,
-                          size: 23,
+        child: AnimatedContainer(
+          duration: durata(context, 180),
+          decoration: BoxDecoration(
+            color: selezionata ? accento.tinta : superficie,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: selezionata ? accento.base : bordo,
+              width: selezionata ? 2 : 1,
+            ),
+            boxShadow: selezionata
+                ? [BoxShadow(color: accento.base.withValues(alpha: .18), blurRadius: 14, offset: const Offset(0, 6))]
+                : const [BoxShadow(color: Color(0x0A12261B), blurRadius: 10, offset: Offset(0, 4))],
+          ),
+          child: Material(
+            type: MaterialType.transparency,
+            child: InkWell(
+              onTap: selezionaCategoria,
+              borderRadius: BorderRadius.circular(20),
+              child: Container(
+                constraints: const BoxConstraints(minHeight: 112),
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        IconaTonda(
+                          categoria.icona,
+                          colore: accento.forte,
+                          sfondo: selezionata ? superficie : accento.tinta,
+                          dimensione: 42,
                         ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    nome,
-                    style: TextStyle(
-                      color: testo,
-                      fontSize: 15,
-                      height: 1.2,
-                      fontWeight: selezionata
-                          ? FontWeight.w800
-                          : FontWeight.w700,
+                        const Spacer(),
+                        AnimatedScale(
+                          scale: selezionata ? 1 : 0,
+                          duration: durata(context, 200),
+                          curve: Curves.easeOutBack,
+                          child: Icon(Icons.check_circle_rounded, color: accento.forte, size: 24),
+                        ),
+                      ],
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 12),
+                    Text(
+                      nome,
+                      style: TextStyle(
+                        color: testo,
+                        fontSize: 15,
+                        height: 1.2,
+                        fontWeight: selezionata ? FontWeight.w800 : FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -1237,40 +1229,77 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
 
   Widget _selettoreGravita(Copie s) {
     const livelli = [
-      ('bassa', 'Bassa', 'Low', verde),
-      ('media', 'Media', 'Medium', Color.fromARGB(255, 208, 222, 21)),
-      ('alta', 'Alta', 'High', Color.fromARGB(255, 236, 45, 45)),
+      ('bassa', 'Bassa', 'Low', foglia),
+      ('media', 'Media', 'Medium', sole),
+      ('alta', 'Alta', 'High', corallo),
     ];
 
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: livelli.map((livello) {
-        final selezionata = _gravita == livello.$1;
-        return ChoiceChip(
-            label: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  selezionata ? Icons.circle : Icons.circle_outlined,
-                  size: 13,
-                  color: livello.$4,
+    return Row(
+      children: [
+        for (final (i, livello) in livelli.indexed) ...[
+          if (i > 0) const SizedBox(width: 8),
+          Expanded(
+            child: Builder(builder: (context) {
+              final selezionata = _gravita == livello.$1;
+              final nome = s.t(livello.$2, livello.$3);
+              return Semantics(
+                button: true,
+                selected: selezionata,
+                label: nome,
+                onTap: () => setState(() => _gravita = livello.$1),
+                excludeSemantics: true,
+                child: AnimatedContainer(
+                  duration: durata(context, 180),
+                  decoration: BoxDecoration(
+                    color: selezionata ? livello.$4.withValues(alpha: .14) : superficie,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: selezionata ? livello.$4 : bordo, width: selezionata ? 1.8 : 1),
+                  ),
+                  child: Material(
+                    type: MaterialType.transparency,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(16),
+                      onTap: () => setState(() => _gravita = livello.$1),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 6),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            AnimatedContainer(
+                              duration: durata(context, 180),
+                              width: 11,
+                              height: 11,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: livello.$4,
+                                boxShadow: selezionata
+                                    ? [BoxShadow(color: livello.$4.withValues(alpha: .35), spreadRadius: 3)]
+                                    : null,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: Text(
+                                nome,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 14.5,
+                                  fontWeight: selezionata ? FontWeight.w800 : FontWeight.w600,
+                                  color: testo,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
-                const SizedBox(width: 7),
-                Text(s.t(livello.$2, livello.$3)),
-              ],
-            ),
-            selected: selezionata,
-            showCheckmark: false,
-            backgroundColor: superficieVerde,
-            selectedColor: livello.$4.withValues(alpha: .14),
-            side: BorderSide(
-              color: selezionata ? livello.$4 : bordo,
-              width: selezionata ? 1.5 : 1,
-            ),
-            onSelected: (_) => setState(() => _gravita = livello.$1),
-          );
-      }).toList(),
+              );
+            }),
+          ),
+        ],
+      ],
     );
   }
 
@@ -1278,28 +1307,10 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
+        _intestazionePassaggio(
           s.t('Che problema hai notato?', 'What problem did you notice?'),
-          style: const TextStyle(
-            fontSize: 23,
-            height: 1.2,
-            fontWeight: FontWeight.w800,
-            color: testo,
-          ),
+          s.t('Scegli la categoria che descrive meglio la situazione.', 'Choose the category that best describes the situation.'),
         ),
-        const SizedBox(height: 7),
-        Text(
-          s.t(
-            'Scegli la categoria che descrive meglio la situazione.',
-            'Choose the category that best describes the situation.',
-          ),
-          style: const TextStyle(
-            fontSize: 16,
-            height: 1.45,
-            color: testoSecondario,
-          ),
-        ),
-        const SizedBox(height: 18),
         LayoutBuilder(
           builder: (builderContext, constraints) {
             final larghezza = (constraints.maxWidth - 12) / 2;
@@ -1307,242 +1318,254 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
               spacing: 12,
               runSpacing: 12,
               children: _categorie
-                  .map(
-                    (categoria) => SizedBox(
-                      width: larghezza,
-                      child: _schedaCategoria(categoria, s),
-                    ),
-                  ) // 
+                  .map((categoria) => SizedBox(width: larghezza, child: _schedaCategoria(categoria, s)))
                   .toList(),
             );
           },
         ),
-        const SizedBox(height: 18),
-        Text(
+        const SizedBox(height: 24),
+        _etichettaCampo(
           s.t('Quanto è urgente?', 'How urgent is it?'),
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w800,
-            color: testo,
-          ),
+          s.t('Scegli un livello per aiutare a capire la priorità del problema.', 'Choose a level to help show how urgent the issue is.'),
         ),
-        const SizedBox(height: 4),
-        Text(
-          s.t(
-            'Scegli un livello per aiutare a capire la priorità del problema.',
-            'Choose a level to help show how urgent the issue is.',
-          ),
-          style: const TextStyle(fontSize: 13, color: testoSecondario),
-        ),
-        const SizedBox(height: 8),
         _selettoreGravita(s),
-        const SizedBox(height: 16),
-        Scheda(
-          padding: const EdgeInsets.all(14),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Icon(Icons.shield_outlined, color: verde, size: 25),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  s.t(
-                    'La segnalazione è anonima. Testo, foto e stato saranno visibili agli altri utenti dell’app (la posizione no): non scrivere dati personali e non fotografare persone. La posizione GPS è necessaria per inviarla; la fotografia è facoltativa.',
-                    'The report is anonymous. Its text, photo and status will be visible to other app users (its location will not): do not include personal data or photograph people. GPS location is required to submit it; a photo is optional.',
-                  ),
-                  style: const TextStyle(
-                    fontSize: 14,
-                    height: 1.45,
-                    color: testo,
-                  ),
-                ),
-              ),
-            ],
+        const SizedBox(height: 20),
+        Riquadro(
+          icona: Icons.shield_outlined,
+          messaggio: s.t(
+            'La segnalazione è anonima. Testo, foto e stato saranno visibili agli altri utenti dell’app (la posizione no): non scrivere dati personali e non fotografare persone. La posizione GPS è necessaria per inviarla; la fotografia è facoltativa.',
+            'The report is anonymous. Its text, photo and status will be visible to other app users (its location will not): do not include personal data or photograph people. GPS location is required to submit it; a photo is optional.',
           ),
         ),
       ],
     );
   }
 
-  Widget _schedaFunzioneInPreparazione({
-    required IconData icona,
-    required Color colore,
-    required Color sfondoCard,
-    required String titolo,
-    required String descrizione,
-    required String dettaglio,
-  }) {
-    return Scheda(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+  // ── Passaggio 2: foto e luogo ──────────────────────────────────────────────
+
+  Widget _intestazioneScheda(IconData icona, Accento accento, String titolo, Widget etichetta) => Row(
         children: [
-          Row(
-            children: [
-              Container(
-                width: 46,
-                height: 46,
-                decoration: BoxDecoration(
-                  color: sfondoCard,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Icon(icona, color: colore, size: 25),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      titolo,
-                      style: const TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w800,
-                        color: testo,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      descrizione,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        height: 1.35,
-                        color: testoSecondario,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 22),
-            decoration: BoxDecoration(
-              color: sfondoCard.withValues(alpha: .65),
-              borderRadius: BorderRadius.circular(15),
-              border: Border.all(color: colore.withValues(alpha: .28)),
-            ),
-            child: Column(
-              children: [
-                Icon(icona, color: colore.withValues(alpha: .85), size: 35),
-                const SizedBox(height: 8),
-                Text(
-                  dettaglio,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    height: 1.4,
-                    color: testoSecondario,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 11,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    widget.s.t('In preparazione', 'Coming soon'),
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: colore,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+          IconaTonda(icona, colore: accento.forte, sfondo: accento.tinta, dimensione: 40),
+          const SizedBox(width: 12),
+          Expanded(child: Text(titolo, style: const TextStyle(fontSize: 16.5, fontWeight: FontWeight.w800, color: testo))),
+          const SizedBox(width: 8),
+          etichetta,
         ],
-      ),
-    );
-  }
+      );
 
   Widget _passaggioFotoLuogo(Copie s) {
+    final posizioneRilevata = _posizione != null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(s.t('Aggiungiamo i dettagli', 'Add the details'), style: const TextStyle(fontSize: 23, height: 1.2, fontWeight: FontWeight.w800, color: testo)),
-        const SizedBox(height: 7),
-        Text(s.t('Allega una fotografia, se disponibile, e rileva il punto GPS del problema.', 'Attach a photo if available and get the GPS location of the issue.'), style: const TextStyle(fontSize: 16, height: 1.45, color: testoSecondario)),
-        const SizedBox(height: 18),
+        _intestazionePassaggio(
+          s.t('Aggiungiamo i dettagli', 'Add the details'),
+          s.t('Allega una fotografia, se disponibile, e rileva il punto GPS del problema.', 'Attach a photo if available and get the GPS location of the issue.'),
+        ),
         Scheda(
           padding: const EdgeInsets.all(16),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              const Icon(Icons.add_a_photo_outlined, color: verde, size: 25),
-              const SizedBox(width: 10),
-              Expanded(child: Text(s.t('Fotografia del problema', 'Photo of the issue'), style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: testo))),
-            ]),
-            const SizedBox(height: 10),
-            if (_foto != null) ...[
-              ClipRRect(borderRadius: BorderRadius.circular(12), child: FutureBuilder<Uint8List>(future: _foto!.readAsBytes(), builder: (context, snapshot) => snapshot.hasData ? Image.memory(snapshot.data!, height: 150, width: double.infinity, fit: BoxFit.cover) : const SizedBox(height: 80, child: Center(child: CircularProgressIndicator())))),
-              const SizedBox(height: 8),
-              Text(_foto!.name, style: const TextStyle(fontSize: 13, color: testoSecondario)),
-            ] else
-              Text(s.t('Nessuna fotografia selezionata. La foto è facoltativa e sarà visibile agli altri utenti: inquadra solo il problema, senza persone né targhe.', 'No photo selected. A photo is optional and will be visible to other users: frame only the issue, without people or number plates.'), style: const TextStyle(fontSize: 14, color: testoSecondario)),
+            _intestazioneScheda(
+              Icons.photo_camera_rounded,
+              Accento.blu,
+              s.t('Fotografia del problema', 'Photo of the issue'),
+              Etichetta(s.t('Facoltativa', 'Optional'), colore: testoSecondario, sfondo: sfondo),
+            ),
+            const SizedBox(height: 14),
+            AnimatedSwitcher(
+              duration: durata(context, 250),
+              child: _foto != null
+                  ? Column(
+                      key: const ValueKey('foto'),
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Stack(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(16),
+                              child: FutureBuilder<Uint8List>(
+                                future: _anteprimaFoto,
+                                builder: (context, snapshot) => snapshot.hasData
+                                    ? Image.memory(snapshot.data!, height: 190, width: double.infinity, fit: BoxFit.cover)
+                                    : Container(
+                                        height: 190,
+                                        color: sfondo,
+                                        alignment: Alignment.center,
+                                        child: const CircularProgressIndicator(),
+                                      ),
+                              ),
+                            ),
+                            Positioned(
+                              top: 8,
+                              right: 8,
+                              child: IconButton.filled(
+                                tooltip: s.t('Rimuovi', 'Remove'),
+                                onPressed: _rimuoviFoto,
+                                style: IconButton.styleFrom(backgroundColor: Colors.white, foregroundColor: coralloScuro),
+                                icon: const Icon(Icons.delete_outline_rounded),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(_foto!.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, color: testoSecondario)),
+                      ],
+                    )
+                  : Container(
+                      key: const ValueKey('vuoto'),
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 20),
+                      decoration: BoxDecoration(
+                        color: sfondo,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: bordoForte),
+                      ),
+                      child: Column(children: [
+                        const Icon(Icons.add_photo_alternate_outlined, size: 36, color: testoTenue),
+                        const SizedBox(height: 8),
+                        Text(
+                          s.t('Nessuna fotografia selezionata. La foto è facoltativa e sarà visibile agli altri utenti: inquadra solo il problema, senza persone né targhe.', 'No photo selected. A photo is optional and will be visible to other users: frame only the issue, without people or number plates.'),
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 13.5, height: 1.45, color: testoSecondario),
+                        ),
+                      ]),
+                    ),
+            ),
             const SizedBox(height: 12),
-            Wrap(spacing: 8, runSpacing: 8, children: [
-              OutlinedButton.icon(onPressed: () => _selezionaFoto(ImageSource.camera), icon: const Icon(Icons.camera_alt_outlined), label: Text(s.t('Fotocamera', 'Camera'))),
-              OutlinedButton.icon(onPressed: () => _selezionaFoto(ImageSource.gallery), icon: const Icon(Icons.photo_library_outlined), label: Text(s.t('Galleria', 'Gallery'))),
-              if (_foto != null) TextButton.icon(onPressed: () => setState(() => _foto = null), icon: const Icon(Icons.delete_outline), label: Text(s.t('Rimuovi', 'Remove'))),
+            Row(children: [
+              Expanded(
+                child: FilledButton.tonalIcon(
+                  onPressed: () => _selezionaFoto(ImageSource.camera),
+                  style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
+                  icon: const Icon(Icons.camera_alt_outlined),
+                  label: Text(s.t('Fotocamera', 'Camera')),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: FilledButton.tonalIcon(
+                  onPressed: () => _selezionaFoto(ImageSource.gallery),
+                  style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
+                  icon: const Icon(Icons.photo_library_outlined),
+                  label: Text(s.t('Galleria', 'Gallery')),
+                ),
+              ),
             ]),
           ]),
         ),
         const SizedBox(height: 14),
         Scheda(
           padding: const EdgeInsets.all(16),
+          coloreBordo: posizioneRilevata ? foglia.withValues(alpha: .5) : null,
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              const Icon(Icons.location_on_outlined, color: verdeProfondo, size: 25),
-              const SizedBox(width: 10),
-              Expanded(child: Text(s.t('Posizione del problema', 'Issue location'), style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: testo))),
-            ]),
-            const SizedBox(height: 8),
-            Text(_posizione == null ? s.t('La posizione GPS è obbligatoria per inviare una segnalazione di problema.', 'GPS location is required to submit an issue report.') : 'GPS: ${_posizione!.latitude.toStringAsFixed(6)}, ${_posizione!.longitude.toStringAsFixed(6)}', style: const TextStyle(fontSize: 14, height: 1.4, color: testoSecondario)),
+            _intestazioneScheda(
+              posizioneRilevata ? Icons.where_to_vote_rounded : Icons.location_on_rounded,
+              posizioneRilevata ? Accento.verde : Accento.arancio,
+              s.t('Posizione del problema', 'Issue location'),
+              posizioneRilevata
+                  ? Etichetta(s.t('Rilevata', 'Detected'), icona: Icons.check_rounded)
+                  : Etichetta(s.t('Obbligatoria', 'Required'), colore: coralloScuro, sfondo: coralloChiaro),
+            ),
             const SizedBox(height: 12),
-            SizedBox(width: double.infinity, child: OutlinedButton.icon(
-              onPressed: _caricamentoGps ? null : _rilevaPosizione,
-              icon: _caricamentoGps ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.my_location_rounded),
-              label: Text(_caricamentoGps ? s.t('Rilevamento...', 'Locating...') : s.t('Rileva posizione GPS', 'Get GPS location')),
-            )),
+            Text(
+              posizioneRilevata
+                  ? 'GPS: ${_posizione!.latitude.toStringAsFixed(6)}, ${_posizione!.longitude.toStringAsFixed(6)}'
+                  : s.t('La posizione GPS è obbligatoria per inviare una segnalazione di problema.', 'GPS location is required to submit an issue report.'),
+              style: TextStyle(
+                fontSize: 14,
+                height: 1.4,
+                color: posizioneRilevata ? testo : testoSecondario,
+                fontWeight: posizioneRilevata ? FontWeight.w700 : FontWeight.w400,
+              ),
+            ),
+            AnimatedSize(
+              duration: durata(context, 300),
+              curve: Curves.easeOutCubic,
+              child: posizioneRilevata ? _mappaPosizione(s) : const SizedBox(width: double.infinity),
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: Builder(builder: (context) {
+                final onPressed = _caricamentoGps ? null : _rilevaPosizione;
+                final icon = _caricamentoGps
+                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.my_location_rounded);
+                final label = Text(_caricamentoGps ? s.t('Rilevamento...', 'Locating...') : s.t('Rileva posizione GPS', 'Get GPS location'));
+                // Pieno finché manca la posizione, poi secondario.
+                return posizioneRilevata
+                    ? OutlinedButton.icon(onPressed: onPressed, icon: icon, label: label)
+                    : FilledButton.icon(onPressed: onPressed, icon: icon, label: label);
+              }),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              s.t('La segnalazione può essere inviata solo se la posizione rientra nell’area del parco configurata.', 'The report can be submitted only if the location is within the configured park area.'),
+              style: const TextStyle(fontSize: 12.5, height: 1.45, color: testoSecondario),
+            ),
           ]),
         ),
-        const SizedBox(height: 10),
-        Text(s.t('La segnalazione può essere inviata solo se la posizione rientra nell’area del parco configurata.', 'The report can be submitted only if the location is within the configured park area.'), style: const TextStyle(fontSize: 13, height: 1.45, color: testoSecondario)),
       ],
     );
   }
 
-  Widget _rigaRiepilogo(String titolo, String valore, IconData icona) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icona, color: verde, size: 22),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            titolo,
-            style: const TextStyle(fontSize: 14, color: testoSecondario),
+  Widget _mappaPosizione(Copie s) {
+    final demo = CitizenApi.instance.demoMode;
+    final punto = LatLng(_posizione!.latitude, _posizione!.longitude);
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        MappaParco(
+          key: ValueKey(_rilevamenti),
+          centro: punto,
+          zoom: 17,
+          altezza: 190,
+          interattiva: demo,
+          // In demo il punto si può spostare toccando la mappa.
+          onTocco: demo ? (p) => setState(() => _posizione = _posizioneDa(p.latitude, p.longitude)) : null,
+          marcatori: [
+            Marker(
+              point: punto,
+              width: 44,
+              height: 44,
+              alignment: Alignment.topCenter,
+              child: const Icon(
+                Icons.location_on_rounded,
+                size: 44,
+                color: corallo,
+                shadows: [Shadow(color: Color(0x55000000), blurRadius: 8, offset: Offset(0, 2))],
+              ),
+            ),
+          ],
+        ),
+        if (demo) ...[
+          const SizedBox(height: 8),
+          Text(
+            s.t('Demo: tocca la mappa per spostare il punto.', 'Demo: tap the map to move the pin.'),
+            style: const TextStyle(fontSize: 12.5, color: testoSecondario),
           ),
+        ],
+      ]),
+    );
+  }
+
+  // ── Passaggio 3: riepilogo ─────────────────────────────────────────────────
+
+  Widget _rigaRiepilogo(String titolo, String valore, IconData icona, [Accento accento = Accento.verde]) {
+    return Row(
+      children: [
+        IconaTonda(icona, colore: accento.forte, sfondo: accento.tinta, dimensione: 36),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(titolo, style: const TextStyle(fontSize: 14, color: testoSecondario)),
         ),
         const SizedBox(width: 8),
         Flexible(
+          flex: 2,
           child: Text(
             valore,
             textAlign: TextAlign.end,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              color: testo,
-            ),
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: testo),
           ),
         ),
       ],
@@ -1558,37 +1581,11 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
+        _intestazionePassaggio(
           s.t('Ci siamo quasi!', 'Almost done!'),
-          style: const TextStyle(
-            fontSize: 23,
-            height: 1.2,
-            fontWeight: FontWeight.w800,
-            color: testo,
-          ),
+          s.t('La descrizione è facoltativa. Controlla i dettagli prima di inviare la segnalazione.', 'The description is optional. Review the details before submitting the report.'),
         ),
-        const SizedBox(height: 7),
-        Text(
-          s.t(
-            'La descrizione è facoltativa. Controlla i dettagli prima di inviare la segnalazione.',
-            'The description is optional. Review the details before submitting the report.',
-          ),
-          style: const TextStyle(
-            fontSize: 16,
-            height: 1.45,
-            color: testoSecondario,
-          ),
-        ),
-        const SizedBox(height: 18),
-        Text(
-          s.t('Descrizione (facoltativa)', 'Description (optional)'),
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w800,
-            color: testo,
-          ),
-        ),
-        const SizedBox(height: 8),
+        _etichettaCampo(s.t('Descrizione (facoltativa)', 'Description (optional)')),
         TextField(
           controller: _descrizione,
           minLines: 4,
@@ -1603,112 +1600,115 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
               'Add helpful details, such as a nearby landmark…',
             ),
             alignLabelWithHint: true,
-            helperText: s.t(
-              'Non inserire dati personali.',
-              'Do not include personal information.',
-            ),
+            helperText: s.t('Non inserire dati personali.', 'Do not include personal information.'),
           ),
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 14),
         Scheda(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  const Icon(Icons.fact_check_outlined, color: verde, size: 25),
-                  const SizedBox(width: 10),
-                  Text(
-                    s.t('Riepilogo', 'Review'),
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                      color: testo,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 15),
-              _rigaRiepilogo(
-                s.t('Categoria', 'Category'),
-                s.t(categoria.nomeIt, categoria.nomeEn),
-                categoria.icona,
-              ),
+              Text(s.t('Riepilogo', 'Review'), style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: testo)),
+              const SizedBox(height: 14),
+              _rigaRiepilogo(s.t('Categoria', 'Category'), s.t(categoria.nomeIt, categoria.nomeEn), categoria.icona, categoria.accento),
               const Divider(height: 22),
               _rigaRiepilogo(
                 s.t('Gravità', 'Severity'),
                 s.t(
-                  _gravita == 'bassa'
-                      ? 'Bassa'
-                      : _gravita == 'media'
-                      ? 'Media'
-                      : 'Alta',
-                  _gravita == 'bassa'
-                      ? 'Low'
-                      : _gravita == 'media'
-                      ? 'Medium'
-                      : 'High',
+                  _gravita == 'bassa' ? 'Bassa' : _gravita == 'media' ? 'Media' : 'Alta',
+                  _gravita == 'bassa' ? 'Low' : _gravita == 'media' ? 'Medium' : 'High',
                 ),
                 Icons.flag_outlined,
+                _gravita == 'alta' ? Accento.arancio : _gravita == 'media' ? Accento.giallo : Accento.verde,
               ),
               const Divider(height: 22),
-              _rigaRiepilogo(
-                s.t('Fotografia', 'Photo'),
-                _foto?.name ?? s.t('Facoltativa', 'Optional'),
-                Icons.photo_outlined,
-              ),
+              _rigaRiepilogo(s.t('Fotografia', 'Photo'), _foto?.name ?? s.t('Facoltativa', 'Optional'), Icons.photo_outlined, Accento.blu),
               const Divider(height: 22),
               _rigaRiepilogo(
                 s.t('Posizione', 'Location'),
                 _posizione == null ? s.t('Non rilevata', 'Not detected') : '${_posizione!.latitude.toStringAsFixed(4)}, ${_posizione!.longitude.toStringAsFixed(4)}',
                 Icons.location_on_outlined,
+                _posizione == null ? Accento.arancio : Accento.verde,
               ),
               if (_descrizione.text.trim().isNotEmpty) ...[
                 const Divider(height: 22),
-                Text(
-                  s.t('Descrizione', 'Description'),
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: testoSecondario,
-                  ),
-                ),
+                Text(s.t('Descrizione', 'Description'), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: testoSecondario)),
                 const SizedBox(height: 5),
-                Text(
-                  _descrizione.text.trim(),
-                  style: const TextStyle(
-                    fontSize: 15,
-                    height: 1.45,
-                    color: testo,
-                  ),
-                ),
+                Text(_descrizione.text.trim(), style: const TextStyle(fontSize: 15, height: 1.45, color: testo)),
               ],
             ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        Semantics(
-          liveRegion: true,
-          child: Text(
-            s.t(
-              'La segnalazione verrà inviata al server quando premi Completa.',
-              'The report will be sent to the server when you tap Finish.',
-            ),
-            style: const TextStyle(
-              fontSize: 13,
-              height: 1.45,
-              color: testoSecondario,
-            ),
           ),
         ),
       ],
     );
   }
 
+  Widget _pulsanti(Copie s) {
+    return LayoutBuilder(
+      builder: (context, vincoli) {
+        final testoIngrandito = MediaQuery.textScalerOf(context).scale(16) > 18;
+        final impilaPulsanti = _passaggio > 0 && (vincoli.maxWidth < 340 || testoIngrandito);
+        final pulsanteIndietro = SizedBox(
+          height: 56,
+          child: OutlinedButton.icon(
+            onPressed: _tornaIndietro,
+            icon: const Icon(Icons.arrow_back_rounded),
+            label: Text(s.t('Indietro', 'Back')),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(0, 56),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              backgroundColor: superficie,
+              textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            ),
+          ),
+        );
+        final pulsanteAvanti = SizedBox(
+          height: 56,
+          child: FilledButton.icon(
+            onPressed: _invioInCorso ? null : _vaiAvanti,
+            icon: _invioInCorso
+                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : Icon(_passaggio == 2 ? Icons.send_rounded : Icons.arrow_forward_rounded),
+            label: Text(
+              s.t(
+                _invioInCorso ? 'Invio...' : _passaggio == 2 ? 'Completa' : 'Continua',
+                _invioInCorso ? 'Sending...' : _passaggio == 2 ? 'Finish' : 'Continue',
+              ),
+            ),
+            style: FilledButton.styleFrom(
+              backgroundColor: foresta,
+              foregroundColor: Colors.white,
+              disabledBackgroundColor: foresta.withValues(alpha: .6),
+              disabledForegroundColor: Colors.white,
+              minimumSize: const Size(0, 56),
+              textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+            ),
+          ),
+        );
+
+        if (_passaggio == 0) return SizedBox(width: double.infinity, child: pulsanteAvanti);
+        if (impilaPulsanti) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [pulsanteIndietro, const SizedBox(height: 10), pulsanteAvanti],
+          );
+        }
+        return Row(
+          children: [
+            Expanded(flex: 2, child: pulsanteIndietro),
+            const SizedBox(width: 10),
+            Expanded(flex: 3, child: pulsanteAvanti),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = widget.s;
+    final animazioni = !MediaQuery.of(context).disableAnimations;
 
     return ContenitorePagina(
       child: Column(
@@ -1716,177 +1716,56 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
         children: [
           TitoloPagina(
             titolo: s.t('Segnala un problema', 'Report a problem'),
-            descrizione: s.t(
-              'Il tuo aiuto rende il parco un posto migliore.',
-              'Your help makes Park a better place.',
-            ),
-            colore: verdeMedio,
+            descrizione: s.t('Il tuo aiuto rende il parco un posto migliore.', 'Your help makes the park a better place.'),
+            icona: Icons.add_a_photo_rounded,
+            accento: Accento.arancio,
           ),
           Scheda(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _indicatorePassaggi(s),
-                const SizedBox(height: 19),
-                AnimatedSwitcher(
-                  duration: MediaQuery.of(context).disableAnimations
-                      ? Duration.zero
-                      : const Duration(milliseconds: 220),
-                  switchInCurve: Curves.easeOut,
-                  switchOutCurve: Curves.easeIn,
-                  child: KeyedSubtree(
-                    key: ValueKey<int>(_passaggio),
-                    child: _passaggio == 0
-                        ? _passaggioProblema(s)
-                        : _passaggio == 1
-                        ? _passaggioFotoLuogo(s)
-                        : _passaggioRiepilogo(s),
-                  ),
-                ),
-                if (_errore != null) ...[
-                  const SizedBox(height: 14),
-                  Semantics(
-                    liveRegion: true,
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(13),
-                      decoration: BoxDecoration(
-                        color: verdePallido,
-                        borderRadius: BorderRadius.circular(13),
-                        border: Border.all(color: verdeMedio),
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Icon(
-                            Icons.error_outline_rounded,
-                            color: verdeMedio,
-                            size: 22,
-                          ),
-                          const SizedBox(width: 9),
-                          Expanded(
-                            child: Text(
-                              _errore!,
-                              style: const TextStyle(
-                                fontSize: 14,
-                                height: 1.4,
-                                color: testo,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+            padding: const EdgeInsets.fromLTRB(12, 16, 12, 14),
+            child: _indicatorePassaggi(s),
+          ),
+          const SizedBox(height: 24),
+          AnimatedSwitcher(
+            duration: durata(context, 280),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeIn,
+            transitionBuilder: (child, animation) => FadeTransition(
+              opacity: animation,
+              child: animazioni
+                  ? SlideTransition(
+                      position: Tween<Offset>(begin: const Offset(.04, 0), end: Offset.zero).animate(animation),
+                      child: child,
+                    )
+                  : child,
+            ),
+            layoutBuilder: (corrente, precedenti) => Stack(
+              alignment: Alignment.topCenter,
+              children: [...precedenti, ?corrente],
+            ),
+            child: KeyedSubtree(
+              key: ValueKey<int>(_passaggio),
+              child: _passaggio == 0
+                  ? _passaggioProblema(s)
+                  : _passaggio == 1
+                      ? _passaggioFotoLuogo(s)
+                      : _passaggioRiepilogo(s),
+            ),
+          ),
+          AnimatedSize(
+            duration: durata(context, 220),
+            curve: Curves.easeOutCubic,
+            child: _errore == null
+                ? const SizedBox(width: double.infinity)
+                : Padding(
+                    padding: const EdgeInsets.only(top: 16),
+                    child: Semantics(
+                      liveRegion: true,
+                      child: Riquadro(icona: Icons.error_outline_rounded, messaggio: _errore!, accento: Accento.arancio),
                     ),
                   ),
-                ],
-                const SizedBox(height: 20),
-                LayoutBuilder(
-                  builder: (context, vincoli) {
-                    final testoIngrandito =
-                        MediaQuery.textScalerOf(context).scale(16) > 18;
-                    final impilaPulsanti = _passaggio > 0 &&
-                        (vincoli.maxWidth < 340 || testoIngrandito);
-                    final pulsanteIndietro = SizedBox(
-                      height: 56,
-                      child: OutlinedButton.icon(
-                        onPressed: _tornaIndietro,
-                        icon: const Icon(Icons.arrow_back_rounded),
-                        label: Text(s.t('Indietro', 'Back')),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: verde,
-                          minimumSize: const Size(0, 56),
-                          side: const BorderSide(color: verde, width: 1.5),
-                          textStyle: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    );
-                    final pulsanteAvanti = SizedBox(
-                      height: 56,
-                      child: FilledButton.icon(
-                        onPressed: _invioInCorso ? null : _vaiAvanti,
-                        icon: Icon(
-                          _invioInCorso ? Icons.hourglass_top_rounded : _passaggio == 2
-                              ? Icons.check_circle_outline_rounded
-                              : Icons.arrow_forward_rounded,
-                        ),
-                        label: Text(
-                          s.t(
-                            _invioInCorso ? 'Invio...' : _passaggio == 2 ? 'Completa' : 'Continua',
-                            _invioInCorso ? 'Sending...' : _passaggio == 2 ? 'Finish' : 'Continue',
-                          ),
-                        ),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: verde,
-                          foregroundColor: Colors.white,
-                          minimumSize: const Size(0, 56),
-                          textStyle: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                    );
-
-                    if (_passaggio == 0) {
-                      return SizedBox(
-                        width: double.infinity,
-                        child: pulsanteAvanti,
-                      );
-                    }
-                    if (impilaPulsanti) {
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          pulsanteIndietro,
-                          const SizedBox(height: 10),
-                          pulsanteAvanti,
-                        ],
-                      );
-                    }
-                    return Row(
-                      children: [
-                        Expanded(child: pulsanteIndietro),
-                        const SizedBox(width: 10),
-                        Expanded(flex: 2, child: pulsanteAvanti),
-                      ],
-                    );
-                  },
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  s.t(
-                    'Puoi tornare indietro e modificare le tue scelte prima dell’invio.',
-                    'You can go back and change your choices before submitting.',
-                  ),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    height: 1.4,
-                    color: testoSecondario,
-                  ),
-                ),
-              ],
-            ),
           ),
-          const SizedBox(height: 14),
-          Semantics(
-            label: s.t('Informazione sulla privacy', 'Privacy information'),
-            child: Text(
-              s.t(
-                'La segnalazione viene inviata in forma anonima al backend del parco.',
-                'The report is submitted anonymously to the park backend.',
-              ),
-              style: const TextStyle(
-                fontSize: 13,
-                height: 1.45,
-                color: testoSecondario,
-              ),
-            ),
-          ),
+          const SizedBox(height: 22),
+          _pulsanti(s),
         ],
       ),
     );
@@ -1898,16 +1777,14 @@ class _CategoriaSegnalazione {
   final String nomeIt;
   final String nomeEn;
   final IconData icona;
-  final Color colore;
-  final Color sfondo;
+  final Accento accento;
 
   const _CategoriaSegnalazione({
     required this.id,
     required this.nomeIt,
     required this.nomeEn,
     required this.icona,
-    required this.colore,
-    required this.sfondo,
+    required this.accento,
   });
 
   // Icone Material indicate dal backend (campo `icon` di /citizen/categories).
@@ -1937,7 +1814,21 @@ class _CategoriaSegnalazione {
     'other': 'Other',
   };
 
-  static const List<Color> _colori = [verdeMedio, verde, verdeIntermedio, verdeAccento, verdePrincipale];
+  /// Colore di ogni categoria nota; le altre ricevono un colore stabile dal codice.
+  static const Map<String, Accento> _accenti = {
+    'lighting': Accento.giallo,
+    'waste': Accento.blu,
+    'green': Accento.verde,
+    'irrigation': Accento.blu,
+    'fountains': Accento.blu,
+    'furniture': Accento.arancio,
+    'cleaning': Accento.viola,
+    'safety': Accento.arancio,
+    'play': Accento.giallo,
+    'other': Accento.viola,
+  };
+
+  static const List<Accento> _ciclo = [Accento.verde, Accento.blu, Accento.giallo, Accento.arancio, Accento.viola];
 
   factory _CategoriaSegnalazione.fromBackend(Map<String, dynamic> json) {
     final code = json['code'] as String;
@@ -1947,11 +1838,14 @@ class _CategoriaSegnalazione {
       nomeIt: label,
       nomeEn: _nomiEn[code] ?? label,
       icona: _icone[json['icon']] ?? Icons.label_outline_rounded,
-      colore: _colori[code.codeUnits.fold<int>(0, (a, b) => a + b) % _colori.length],
-      sfondo: code == 'green' ? verdeChiaro : verdePallido,
+      accento: _accenti[code] ?? _ciclo[code.codeUnits.fold<int>(0, (a, b) => a + b) % _ciclo.length],
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Idee
+// ─────────────────────────────────────────────────────────────────────────────
 
 /// Idea pubblicata nel parco: nel backend è una segnalazione `suggestion`.
 /// La prima riga della descrizione fa da titolo.
@@ -1984,7 +1878,7 @@ class _IdeaItem {
     );
   }
 
-  String get dateLabel => '${createdAt.day.toString().padLeft(2, '0')}/${createdAt.month.toString().padLeft(2, '0')}';
+  String get dateLabel => formattaData(createdAt);
 }
 
 class SchermataIdee extends StatefulWidget {
@@ -2067,17 +1961,27 @@ class _SchermataIdeeState extends State<SchermataIdee> {
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        icon: const IconaTonda(Icons.lightbulb_rounded, colore: soleScuro, sfondo: soleChiaro, dimensione: 56),
         title: Text(s.t('Anteprima del suggerimento', 'Suggestion preview')),
         content: SingleChildScrollView(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-          Text(s.t('Titolo', 'Title'), style: const TextStyle(fontWeight: FontWeight.w800)),
-          const SizedBox(height: 4), Text(titolo),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(color: sfondo, borderRadius: BorderRadius.circular(16)),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(titolo, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, height: 1.3)),
+              const SizedBox(height: 6),
+              Text(dettagli, style: const TextStyle(color: testoSecondario, height: 1.4)),
+              const SizedBox(height: 10),
+              Etichetta('${s.t('Argomento', 'Topic')}: ${_nomeCategoria(_categoria)}', colore: soleScuro, sfondo: soleChiaro),
+            ]),
+          ),
           const SizedBox(height: 12),
-          Text(s.t('Dettagli', 'Details'), style: const TextStyle(fontWeight: FontWeight.w800)),
-          const SizedBox(height: 4), Text(dettagli),
-          const SizedBox(height: 12),
-          Text('${s.t('Argomento', 'Topic')}: ${_nomeCategoria(_categoria)}', style: const TextStyle(fontWeight: FontWeight.w700)),
-          const SizedBox(height: 8),
-          Text(s.t('Sarà visibile a tutti gli utenti dell’app.', 'It will be visible to all app users.'), style: const TextStyle(color: testoSecondario)),
+          Row(children: [
+            const Icon(Icons.public_rounded, size: 16, color: testoSecondario),
+            const SizedBox(width: 6),
+            Expanded(child: Text(s.t('Sarà visibile a tutti gli utenti dell’app.', 'It will be visible to all app users.'), style: const TextStyle(color: testoSecondario, fontSize: 13))),
+          ]),
         ])),
         actions: [
           TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: Text(s.t('Modifica', 'Edit'))),
@@ -2112,32 +2016,68 @@ class _SchermataIdeeState extends State<SchermataIdee> {
   }
 
   Widget _schedaIdea(_IdeaItem idea, Copie s) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Scheda(
-        padding: const EdgeInsets.all(15), colore: const Color(0xFFF7F1E5), coloreBordo: const Color(0xFFA18A62),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Container(width: 40, height: 40, decoration: BoxDecoration(color: verdePallido, borderRadius: BorderRadius.circular(13)), child: const Icon(Icons.lightbulb_outline_rounded, color: verdeMedio)),
-            const SizedBox(width: 11),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(idea.title, style: const TextStyle(fontSize: 16, height: 1.3, fontWeight: FontWeight.w800, color: testo)),
-              if (idea.description.isNotEmpty) ...[
-                const SizedBox(height: 5),
-                Text(idea.description, style: const TextStyle(fontSize: 14, height: 1.4, color: testoSecondario)),
-              ],
-            ])),
-          ]),
-          const SizedBox(height: 10),
-          Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, runSpacing: 8, children: [
+    return Scheda(
+      padding: const EdgeInsets.all(16),
+      coloreBordo: idea.mine ? sole.withValues(alpha: .45) : null,
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const IconaTonda(Icons.lightbulb_rounded, colore: soleScuro, sfondo: soleChiaro, dimensione: 40),
+          const SizedBox(width: 12),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(idea.title, style: const TextStyle(fontSize: 16, height: 1.3, fontWeight: FontWeight.w800, color: testo)),
+            if (idea.description.isNotEmpty) ...[
+              const SizedBox(height: 5),
+              Text(idea.description, style: const TextStyle(fontSize: 14, height: 1.45, color: testoSecondario)),
+            ],
+          ])),
+        ]),
+        const SizedBox(height: 14),
+        Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, runSpacing: 8, children: [
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            const Icon(Icons.schedule_rounded, size: 15, color: testoTenue),
+            const SizedBox(width: 5),
             Text([idea.dateLabel, if (idea.categoryLabel != null) idea.categoryLabel!].join(' · '), style: const TextStyle(fontSize: 13, color: testoSecondario)),
-            Wrap(crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, children: [
-              if (idea.mine) Text(s.t('La tua idea', 'Your idea'), style: const TextStyle(fontSize: 13, color: verde, fontWeight: FontWeight.w800)),
-              Text(idea.statusLabel, style: const TextStyle(fontSize: 13, color: testoSecondario, fontWeight: FontWeight.w700)),
-            ]),
+          ]),
+          Wrap(crossAxisAlignment: WrapCrossAlignment.center, spacing: 6, runSpacing: 6, children: [
+            if (idea.mine) Etichetta(s.t('La tua idea', 'Your idea'), icona: Icons.person_rounded),
+            if (idea.statusLabel.isNotEmpty) Etichetta(idea.statusLabel, colore: testoSecondario, sfondo: sfondo, puntino: true),
           ]),
         ]),
-      ),
+      ]),
+    );
+  }
+
+  Widget _elencoIdee(Copie s) {
+    if (_caricamento) {
+      return CaricamentoScheletro(key: const ValueKey('caricamento'), numero: 2, etichetta: s.t('Caricamento delle idee', 'Loading ideas'));
+    }
+    if (_errore != null) {
+      return StatoVuoto(
+        key: const ValueKey('errore'),
+        icona: Icons.cloud_off_rounded,
+        messaggio: _errore!,
+        accento: Accento.arancio,
+        onAzione: _caricaIdee,
+        etichettaAzione: s.t('Riprova', 'Retry'),
+      );
+    }
+    if (_idee.isEmpty) {
+      return StatoVuoto(
+        key: const ValueKey('vuoto'),
+        icona: Icons.emoji_objects_outlined,
+        messaggio: s.t('Non ci sono ancora idee. Puoi essere il primo a proporne una.', 'There are no ideas yet. You can be the first to suggest one.'),
+        accento: Accento.giallo,
+      );
+    }
+    return Column(
+      key: const ValueKey('elenco'),
+      children: [
+        for (final (i, idea) in _idee.indexed)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Appare(indice: i, child: _schedaIdea(idea, s)),
+          ),
+      ],
     );
   }
 
@@ -2147,41 +2087,65 @@ class _SchermataIdeeState extends State<SchermataIdee> {
     return RefreshIndicator(
       onRefresh: () => _caricaIdee(silenzioso: true),
       child: ContenitorePagina(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        TitoloPagina(titolo: s.t('Idee per il parco', 'Ideas for the park'), descrizione: s.t('Proponi un miglioramento e guarda cosa propongono gli altri.', 'Suggest an improvement and see what others suggest.'), colore: verdeAccento),
-        const SizedBox(height: 4),
-        Container(padding: const EdgeInsets.all(17), decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFF244B35), Color(0xFF527A50)], begin: Alignment.topLeft, end: Alignment.bottomRight), borderRadius: BorderRadius.circular(18), boxShadow: const [BoxShadow(color: Color(0x1A17271D), blurRadius: 16, offset: Offset(0, 5))]), child: Row(children: [const Icon(Icons.lightbulb_rounded, color: Colors.white, size: 34), const SizedBox(width: 13), Expanded(child: Text(s.t('Ogni idea può far crescere qualcosa di bello.', 'Every idea can help something good grow.'), style: const TextStyle(fontSize: 15, height: 1.35, color: Colors.white, fontWeight: FontWeight.w700)))])),
-        const SizedBox(height: 18),
-        Scheda(padding: const EdgeInsets.all(16), colore: const Color(0xFFFFFDF7), coloreBordo: const Color(0xFF9BAA8D), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(s.t('La tua idea', 'Your idea'), style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: testo)),
-          const SizedBox(height: 4),
-          Text(s.t('Ogni proposta è benvenuta: raccontaci cosa migliorerebbe il parco.', 'Every suggestion is welcome: tell us what could make the park better.'), style: const TextStyle(fontSize: 14, height: 1.4, color: testoSecondario)),
-          const SizedBox(height: 14),
+        TitoloPagina(
+          titolo: s.t('Idee per il parco', 'Ideas for the park'),
+          descrizione: s.t('Proponi un miglioramento e guarda cosa propongono gli altri.', 'Suggest an improvement and see what others suggest.'),
+          icona: Icons.lightbulb_rounded,
+          accento: Accento.giallo,
+        ),
+        Scheda(padding: const EdgeInsets.all(18), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const IconaTonda(Icons.edit_note_rounded, colore: soleScuro, sfondo: soleChiaro, dimensione: 44),
+            const SizedBox(width: 12),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(s.t('La tua idea', 'Your idea'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: testo)),
+              const SizedBox(height: 3),
+              Text(s.t('Ogni proposta è benvenuta: raccontaci cosa migliorerebbe il parco.', 'Every suggestion is welcome: tell us what could make the park better.'), style: const TextStyle(fontSize: 14, height: 1.4, color: testoSecondario)),
+            ])),
+          ]),
+          const SizedBox(height: 18),
           TextField(controller: _titolo, textCapitalization: TextCapitalization.sentences, maxLength: 120, decoration: InputDecoration(labelText: s.t('Titolo', 'Title'), hintText: s.t('Es. Più ombra vicino all’area giochi', 'E.g. More shade near the playground'))),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           TextField(controller: _dettagli, minLines: 3, maxLines: 4, maxLength: 870, textCapitalization: TextCapitalization.sentences, decoration: InputDecoration(labelText: s.t('Descrizione', 'Description'), hintText: s.t('Descrivi la tua idea in poche parole…', 'Describe your idea in a few words…'), helperText: s.t('Non inserire dati personali.', 'Do not include personal information.'), alignLabelWithHint: true)),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            initialValue: _categorie.any((c) => c['code'] == _categoria) ? _categoria : null,
-            decoration: InputDecoration(labelText: s.t('Argomento', 'Topic')),
-            items: [for (final c in _categorie) DropdownMenuItem(value: c['code'] as String, child: Text((c['label'] ?? c['code']).toString()))],
-            onChanged: (v) { if (v != null) setState(() => _categoria = v); },
-          ),
-          const SizedBox(height: 8),
-          Text(s.t('Le idee sono pubbliche: le vedono tutti gli utenti dell’app e i gestori del parco.', 'Ideas are public: all app users and park managers can see them.'), style: const TextStyle(fontSize: 13, height: 1.4, color: testoSecondario)),
           const SizedBox(height: 14),
-          PulsanteAzione(testo: _invio ? s.t('Invio in corso...', 'Submitting...') : s.t('Rivedi e invia', 'Review and submit'), icona: Icons.preview_rounded, colore: verdeScuro, onPressed: _invio ? null : () => _mostraAnteprima(s)),
+          Text(s.t('Argomento', 'Topic'), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: testo)),
+          const SizedBox(height: 8),
+          Wrap(spacing: 8, runSpacing: 8, children: [
+            for (final c in _categorie)
+              ChoiceChip(
+                label: Text((c['label'] ?? c['code']).toString()),
+                selected: _categoria == c['code'],
+                showCheckmark: false,
+                selectedColor: soleChiaro,
+                side: BorderSide(color: _categoria == c['code'] ? sole : bordo, width: _categoria == c['code'] ? 1.5 : 1),
+                labelStyle: TextStyle(fontWeight: FontWeight.w700, color: _categoria == c['code'] ? soleScuro : testo),
+                onSelected: (_) => setState(() => _categoria = c['code'] as String),
+              ),
+          ]),
+          const SizedBox(height: 16),
+          Riquadro(
+            icona: Icons.public_rounded,
+            accento: Accento.blu,
+            messaggio: s.t('Le idee sono pubbliche: le vedono tutti gli utenti dell’app e i gestori del parco.', 'Ideas are public: all app users and park managers can see them.'),
+          ),
+          const SizedBox(height: 16),
+          PulsanteAzione(testo: _invio ? s.t('Invio in corso...', 'Submitting...') : s.t('Rivedi e invia', 'Review and submit'), icona: Icons.send_rounded, onPressed: _invio ? null : () => _mostraAnteprima(s)),
         ])),
-        const SizedBox(height: 22),
-        Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, runSpacing: 4, children: [Text(s.t('Idee della comunità', 'Community ideas'), style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: testo)), Text('${_idee.length} ${s.t('idee', 'ideas')}', style: const TextStyle(fontSize: 13, color: testoSecondario, fontWeight: FontWeight.w700))]),
-        const SizedBox(height: 10),
-        if (_caricamento) const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()))
-        else if (_errore != null) Scheda(child: Column(children: [Text(_errore!, style: const TextStyle(color: testoSecondario)), TextButton(onPressed: _caricaIdee, child: Text(s.t('Riprova', 'Retry')))]))
-        else if (_idee.isEmpty) Scheda(child: Text(s.t('Non ci sono ancora idee. Puoi essere il primo a proporne una.', 'There are no ideas yet. You can be the first to suggest one.'), style: const TextStyle(fontSize: 14, color: testoSecondario)))
-        else ..._idee.map((idea) => _schedaIdea(idea, s)),
+        const SizedBox(height: 28),
+        TitoloSezione(
+          s.t('Idee della comunità', 'Community ideas'),
+          dettaglio: '${_idee.length} ${s.t('idee', 'ideas')}',
+          accento: Accento.giallo,
+        ),
+        AnimatedSwitcher(duration: durata(context, 250), child: _elencoIdee(s)),
       ])),
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Avvisi
+// ─────────────────────────────────────────────────────────────────────────────
 
 class Avviso {
   final String categoria;
@@ -2234,17 +2198,15 @@ class _SchermataAvvisiState extends State<SchermataAvvisi> {
       final parsed = rows.map((item) {
         final level = item['level'] as String? ?? 'info';
         final category = level == 'alert' ? 'importante' : level == 'warning' ? 'manutenzione' : 'novita';
-        final date = DateTime.tryParse(item['starts_at']?.toString() ?? '')?.toLocal();
-        final dateLabel = date == null ? '' : '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}';
         return Avviso(
           categoria: category,
           icona: level == 'alert' ? Icons.priority_high_rounded : level == 'warning' ? Icons.handyman_rounded : Icons.new_releases_rounded,
-          colore: level == 'alert' ? const Color(0xFFB42318) : level == 'warning' ? const Color(0xFF8A5A00) : const Color(0xFF145A86),
+          colore: level == 'alert' ? coralloScuro : level == 'warning' ? soleScuro : cieloScuro,
           titoloIt: item['title'] as String? ?? '',
           titoloEn: item['title'] as String? ?? '',
           descrizioneIt: item['body'] as String? ?? '',
           descrizioneEn: item['body'] as String? ?? '',
-          data: dateLabel,
+          data: formattaData(item['starts_at']),
         );
       }).toList();
       if (mounted) setState(() { _avvisi = parsed; _caricamento = false; });
@@ -2253,15 +2215,66 @@ class _SchermataAvvisiState extends State<SchermataAvvisi> {
     }
   }
 
-  Widget _filtroAvvisi(String valore, String etichetta) {
+  Widget _filtroAvvisi(String valore, String etichetta, IconData icona, Accento accento) {
     final selezionato = _filtro == valore;
     return ChoiceChip(
+      avatar: Icon(icona, size: 18, color: selezionato ? accento.forte : testoSecondario),
       label: Text(etichetta),
       selected: selezionato,
-      selectedColor: verdeChiaro,
-      backgroundColor: superficieVerde,
-      side: BorderSide(color: selezionato ? verde : bordo),
+      showCheckmark: false,
+      selectedColor: accento.tinta,
+      backgroundColor: superficie,
+      labelStyle: TextStyle(fontWeight: FontWeight.w700, color: selezionato ? accento.forte : testo),
+      side: BorderSide(color: selezionato ? accento.base : bordo, width: selezionato ? 1.5 : 1),
       onSelected: (_) => setState(() => _filtro = valore),
+    );
+  }
+
+  Widget _schedaAvviso(Avviso avviso, Copie s) {
+    final importante = avviso.categoria == 'importante';
+    return Scheda(
+      padding: const EdgeInsets.all(16),
+      colore: importante ? const Color(0xFFFFF7F5) : superficie,
+      coloreBordo: importante ? corallo.withValues(alpha: .40) : null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              IconaTonda(avviso.icona, colore: avviso.colore, dimensione: 40),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _etichettaCategoria(s, avviso.categoria, avviso.statoManutenzione),
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: avviso.colore),
+                    ),
+                    if (avviso.data.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(avviso.data, style: const TextStyle(fontSize: 12.5, color: testoSecondario)),
+                    ],
+                  ],
+                ),
+              ),
+              if (importante) Etichetta(s.t('DA LEGGERE', 'PLEASE READ'), colore: coralloScuro, sfondo: coralloChiaro),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            s.t(avviso.titoloIt, avviso.titoloEn),
+            style: const TextStyle(fontSize: 16.5, height: 1.3, fontWeight: FontWeight.w800, color: testo),
+          ),
+          if (s.t(avviso.descrizioneIt, avviso.descrizioneEn).isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              s.t(avviso.descrizioneIt, avviso.descrizioneEn),
+              style: const TextStyle(fontSize: 14.5, height: 1.5, color: testoSecondario),
+            ),
+          ],
+        ],
+      ),
     );
   }
 
@@ -2279,202 +2292,71 @@ class _SchermataAvvisiState extends State<SchermataAvvisi> {
       );
     }
 
-    return ContenitorePagina(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    final Widget contenuto;
+    if (_caricamento) {
+      contenuto = CaricamentoScheletro(key: const ValueKey('caricamento'), etichetta: s.t('Caricamento degli avvisi', 'Loading notices'));
+    } else if (_errore != null) {
+      contenuto = StatoVuoto(
+        key: const ValueKey('errore'),
+        icona: Icons.cloud_off_rounded,
+        messaggio: _errore!,
+        accento: Accento.arancio,
+        onAzione: _caricaAvvisi,
+        etichettaAzione: s.t('Riprova', 'Retry'),
+      );
+    } else if (elenco.isEmpty) {
+      contenuto = StatoVuoto(
+        key: ValueKey('vuoto-$_filtro'),
+        icona: Icons.notifications_off_outlined,
+        messaggio: s.t('Non ci sono aggiornamenti in questa categoria.', 'There are no updates in this category.'),
+        accento: Accento.viola,
+      );
+    } else {
+      contenuto = Column(
+        key: ValueKey('elenco-$_filtro'),
         children: [
-          TitoloPagina(
-            titolo: s.t('Avvisi del parco', 'Park notices'),
-            descrizione: s.t(
-              'Qui trovi comunicazioni, avvisi importanti e aggiornamenti sulla manutenzione.',
-              'Find park news, important notices and maintenance updates here.',
+          for (final (i, avviso) in elenco.indexed)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Appare(indice: i, child: _schedaAvviso(avviso, s)),
             ),
-            colore: verdePrincipale,
-          ),
-          Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            children: [
-              _filtroAvvisi('tutti', s.t('Tutti', 'All')),
-              _filtroAvvisi('importante', s.t('Importanti', 'Important')),
-              _filtroAvvisi('manutenzione', s.t('Manutenzione', 'Maintenance')),
-              _filtroAvvisi('novita', s.t('Novità', 'News')),
-            ],
-          ),
-          const SizedBox(height: 16),
-          if (_caricamento)
-            const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator()))
-          else if (_errore != null)
-            Scheda(child: Column(children: [Text(_errore!, style: const TextStyle(color: testoSecondario)), TextButton(onPressed: _caricaAvvisi, child: Text(s.t('Riprova', 'Retry')))]))
-          else ...[
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  s.t('Aggiornamenti', 'Updates'),
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                    color: testo,
-                  ),
-                ),
-              ),
-              Text(
-                '${elenco.length} ${s.t('elementi', 'items')}',
-                style: const TextStyle(fontSize: 13, color: testoSecondario),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          if (elenco.isEmpty)
-            Scheda(
-              child: Text(
-                s.t(
-                  'Non ci sono aggiornamenti in questa categoria.',
-                  'There are no updates in this category.',
-                ),
-                style: const TextStyle(fontSize: 14, color: testoSecondario),
-              ),
-            )
-          else
-            ...elenco.map(
-              (avviso) => Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Scheda(
-                  colore: avviso.categoria == 'importante'
-                      ? const Color(0xFFFDECEC)
-                      : avviso.categoria == 'novita'
-                          ? const Color(0xFFEAF4FB)
-                          : avviso.statoManutenzione == 'segnalata'
-                              ? const Color(0xFFFFF3E8)
-                              : avviso.statoManutenzione == 'in_corso'
-                                  ? const Color(0xFFFFF8E1)
-                                  : const Color(0xFFEAF0E3),
-                  coloreBordo: avviso.colore,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            width: 42,
-                            height: 42,
-                            decoration: BoxDecoration(
-                              color: avviso.colore.withValues(alpha: .13),
-                              borderRadius: BorderRadius.circular(13),
-                            ),
-                            child: Icon(
-                              avviso.icona,
-                              color: avviso.colore,
-                              size: 23,
-                            ),
-                          ),
-                          const SizedBox(width: 11),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Wrap(
-                                  spacing: 7,
-                                  runSpacing: 5,
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  children: [
-                                    Container(
-                                      width: 8,
-                                      height: 8,
-                                      decoration: BoxDecoration(
-                                        color: avviso.colore,
-                                        shape: BoxShape.circle,
-                                      ),
-                                    ),
-                                    Text(
-                                      _etichettaCategoria(
-                                        s,
-                                        avviso.categoria,
-                                        avviso.statoManutenzione,
-                                      ),
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w800,
-                                        color: avviso.colore,
-                                      ),
-                                    ),
-                                    if (avviso.categoria == 'importante')
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 4,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFFFDECEC),
-                                          borderRadius: BorderRadius.circular(20),
-                                          border: Border.all(
-                                            color: const Color(0xFFB42318),
-                                          ),
-                                        ),
-                                        child: Text(
-                                          s.t('DA LEGGERE', 'PLEASE READ'),
-                                          style: const TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w800,
-                                            color: Color(0xFFB42318),
-                                          ),
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                                const SizedBox(height: 5),
-                                Align(
-                                  alignment: Alignment.centerRight,
-                                  child: Text(
-                                    avviso.data,
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      color: testoSecondario,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        s.t(avviso.titoloIt, avviso.titoloEn),
-                        style: const TextStyle(
-                          fontSize: 16,
-                          height: 1.3,
-                          fontWeight: FontWeight.w800,
-                          color: testo,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        s.t(avviso.descrizioneIt, avviso.descrizioneEn),
-                        style: const TextStyle(
-                          fontSize: 14,
-                          height: 1.45,
-                          color: testoSecondario,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          const SizedBox(height: 6),
-          Text(
-            s.t(
-              'Gli avvisi sono informazioni pubbliche del parco.',
-              'Notices are public park information.',
-            ),
-            style: const TextStyle(fontSize: 13, color: testoSecondario),
-          ),
-          ],
         ],
-      ),
+      );
+    }
+
+    return ContenitorePagina(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TitoloPagina(
+              titolo: s.t('Avvisi del parco', 'Park notices'),
+              descrizione: s.t(
+                'Qui trovi comunicazioni, avvisi importanti e aggiornamenti sulla manutenzione.',
+                'Find park news, important notices and maintenance updates here.',
+              ),
+              icona: Icons.notifications_rounded,
+              accento: Accento.viola,
+            ),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _filtroAvvisi('tutti', s.t('Tutti', 'All'), Icons.apps_rounded, Accento.viola),
+                _filtroAvvisi('importante', s.t('Importanti', 'Important'), Icons.priority_high_rounded, Accento.arancio),
+                _filtroAvvisi('manutenzione', s.t('Manutenzione', 'Maintenance'), Icons.handyman_rounded, Accento.giallo),
+                _filtroAvvisi('novita', s.t('Novità', 'News'), Icons.new_releases_rounded, Accento.blu),
+              ],
+            ),
+            const SizedBox(height: 22),
+            if (!_caricamento && _errore == null)
+              TitoloSezione(
+                s.t('Aggiornamenti', 'Updates'),
+                dettaglio: '${elenco.length} ${s.t('elementi', 'items')}',
+                accento: Accento.viola,
+              ),
+            AnimatedSwitcher(duration: durata(context, 250), child: contenuto),
+          ],
+        ),
     );
   }
 }
