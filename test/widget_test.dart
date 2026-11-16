@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_application_1/citizen_api.dart';
 import 'package:flutter_application_1/main.dart';
+import 'package:flutter_application_1/mappa_parco.dart';
 
 void main() {
   testWidgets('Tryees carica le cinque sezioni principali', (tester) async {
@@ -19,8 +20,8 @@ void main() {
     expect(find.text('Idee'), findsOneWidget);
     expect(find.text('Avvisi'), findsOneWidget);
     expect(find.text('Esplora il parco'), findsOneWidget);
-    expect(find.text('Buono'), findsOneWidget);
-    expect(find.text('Nessuna criticità aperta segnalata.'), findsOneWidget);
+    expect(find.text('Stato del parco'), findsNothing);
+    expect(find.byType(AnteprimaMappa), findsOneWidget);
 
     await tester.tap(find.byTooltip('Cambia lingua'));
     await tester.pumpAndSettle();
@@ -29,7 +30,6 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text('Good'), findsOneWidget);
-    expect(find.text('No open issues are currently reported.'), findsOneWidget);
+    expect(find.text('Open the map'), findsOneWidget);
   });
 }

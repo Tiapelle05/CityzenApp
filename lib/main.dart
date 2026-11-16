@@ -23,67 +23,6 @@ Future<void> main() async {
   runApp(const ParkApp());
 }
 
-enum StatoParco {
-  ottimo('Ottimo', 'Excellent', Icons.eco_rounded, [Color(0xFF0E5A3D), Color(0xFF23895A)]),
-  buono('Buono', 'Good', Icons.eco_rounded, [Color(0xFF0E5A3D), Color(0xFF23895A)]),
-  discreto('Da monitorare', 'Needs attention', Icons.visibility_rounded, [Color(0xFF9A5800), Color(0xFFD48A0C)]),
-  cattivo('Attenzione richiesta', 'Attention required', Icons.warning_amber_rounded, [Color(0xFF8E1B12), Color(0xFFCF3D24)]),
-  nonDisponibile('Non disponibile', 'Unavailable', Icons.cloud_off_rounded, [Color(0xFF3F4F46), Color(0xFF6B7C71)]);
-
-  const StatoParco(this.italiano, this.english, this.icona, this.gradiente);
-
-  final String italiano;
-  final String english;
-  final IconData icona;
-  final List<Color> gradiente;
-}
-
-StatoParco _statoDaBackend(Map<String, dynamic>? data) {
-  switch (data?['level']) {
-    case 'ok': return StatoParco.buono;
-    case 'warning': return StatoParco.discreto;
-    case 'alert': return StatoParco.cattivo;
-    default: return StatoParco.nonDisponibile;
-  }
-}
-
-String _descrizioneStatoDaBackend(Map<String, dynamic>? data, Copie s) {
-  switch (data?['level']) {
-    case 'ok':
-      return s.t(
-        'Nessuna criticità aperta segnalata.',
-        'No open issues are currently reported.',
-      );
-    case 'warning':
-      final openIssues = data?['open_issues'];
-      if (openIssues is int && openIssues > 0) {
-        return openIssues == 1
-            ? s.t(
-                '1 situazione aperta è in gestione.',
-                '1 open issue is being addressed.',
-              )
-            : s.t(
-                '$openIssues situazioni aperte sono in gestione.',
-                '$openIssues open issues are being addressed.',
-              );
-      }
-      return s.t(
-        'È attivo un avviso del parco.',
-        'A park notice is active.',
-      );
-    case 'alert':
-      return s.t(
-        'È attivo un avviso importante del parco.',
-        'An important park notice is active.',
-      );
-    default:
-      return s.t(
-        'Lo stato del parco non è al momento disponibile.',
-        'Park status is currently unavailable.',
-      );
-  }
-}
-
 class ParkApp extends StatefulWidget {
   const ParkApp({super.key});
 
@@ -182,17 +121,7 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
       setState(() => _pagina = indice);
       if (!MediaQuery.of(context).disableAnimations) _transizione.forward(from: 0);
     }
-    if (indice == 0) unawaited(_aggiornaStatoParco());
     if (indice == 4) setState(() => _apertureAvvisi++);
-  }
-
-  Future<void> _aggiornaStatoParco() async {
-    try {
-      await CitizenApi.instance.getParkStatus();
-    } catch (_) {
-      // La schermata mostra lo stato memorizzato se il backend non è raggiungibile.
-    }
-    if (mounted) setState(() {});
   }
 
   Widget _selettoreLingua(Copie s) {
@@ -323,6 +252,7 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
     final accento = _accenti[_pagina];
     final pagine = [
       SchermataInizio(
+        key: ValueKey('inizio-$_invii'),
         s: s,
         onSegnalazioni: () => _vaiA(2),
         onMappa: () => _vaiA(1),
@@ -475,143 +405,6 @@ class SchermataInizio extends StatefulWidget {
 }
 
 class _SchermataInizioState extends State<SchermataInizio> {
-  bool _aggiornamento = true;
-
-  @override
-  void initState() {
-    super.initState();
-    unawaited(_aggiornaStato());
-  }
-
-  Future<void> _aggiornaStato() async {
-    try {
-      await CitizenApi.instance.getParkStatus();
-    } catch (_) {
-      // Resta lo stato memorizzato.
-    }
-    if (mounted) setState(() => _aggiornamento = false);
-  }
-
-  void _aggiornaManualmente() {
-    setState(() => _aggiornamento = true);
-    unawaited(_aggiornaStato());
-  }
-
-  Widget _schedaStato(Copie s) {
-    final statoBackend = CitizenApi.instance.cachedParkStatus;
-    final stato = _statoDaBackend(statoBackend);
-    final descrizioneStato = _descrizioneStatoDaBackend(statoBackend, s);
-    final alta = MediaQuery.highContrastOf(context);
-    final colori = alta ? [stato.gradiente.first, stato.gradiente.first] : stato.gradiente;
-
-    return Semantics(
-      container: true,
-      label: s.t('Stato del parco', 'Park status'),
-      value: s.t(stato.italiano, stato.english),
-      child: AnimatedContainer(
-        duration: durata(context, 500),
-        curve: Curves.easeOutCubic,
-        width: double.infinity,
-        clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(
-          gradient: LinearGradient(colors: colori, begin: Alignment.topLeft, end: Alignment.bottomRight),
-          borderRadius: BorderRadius.circular(28),
-          boxShadow: [
-            BoxShadow(color: colori.last.withValues(alpha: .30), blurRadius: 28, offset: const Offset(0, 12)),
-          ],
-        ),
-        child: Stack(
-          children: [
-            // Decorazioni: un grande albero sfumato e un cerchio di luce.
-            Positioned(
-              right: -26,
-              bottom: -34,
-              child: Icon(Icons.park_rounded, size: 170, color: Colors.white.withValues(alpha: .10)),
-            ),
-            Positioned(
-              right: 50,
-              top: -60,
-              child: Container(
-                width: 140,
-                height: 140,
-                decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: .07)),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(22, 18, 14, 24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: .16),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(stato.icona, size: 16, color: Colors.white),
-                            const SizedBox(width: 6),
-                            Text(
-                              s.t('Stato del parco', 'Park status'),
-                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const Spacer(),
-                      IconButton(
-                        tooltip: s.t('Aggiorna stato', 'Refresh status'),
-                        onPressed: _aggiornamento ? null : _aggiornaManualmente,
-                        style: IconButton.styleFrom(
-                          backgroundColor: Colors.white.withValues(alpha: .16),
-                          disabledBackgroundColor: Colors.white.withValues(alpha: .10),
-                        ),
-                        icon: _aggiornamento
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                              )
-                            : const Icon(Icons.refresh_rounded, size: 21, color: Colors.white),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  AnimatedSwitcher(
-                    duration: durata(context, 300),
-                    child: Text(
-                      s.t(stato.italiano, stato.english),
-                      key: ValueKey(stato),
-                      style: const TextStyle(
-                        fontSize: 32,
-                        height: 1.1,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                        letterSpacing: -.8,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Padding(
-                    padding: const EdgeInsets.only(right: 60),
-                    child: Text(
-                      descrizioneStato,
-                      style: TextStyle(fontSize: 15, height: 1.45, color: Colors.white.withValues(alpha: .92)),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final s = widget.s;
@@ -624,12 +417,12 @@ class _SchermataInizioState extends State<SchermataInizio> {
             child: TitoloPagina(
               titolo: s.t('Esplora il parco', 'Explore the park'),
               descrizione: s.t(
-                'Orientati, scopri lo stato del parco e resta aggiornato.',
-                'Find your way, check the park status and stay up to date.',
+                'Guarda cosa succede nel parco e aiuta a migliorarlo.',
+                'See what is happening in the park and help improve it.',
               ),
             ),
           ),
-          Appare(indice: 1, child: _schedaStato(s)),
+          Appare(indice: 1, child: AnteprimaMappa(s: s, onApri: widget.onMappa)),
           const SizedBox(height: 18),
           Appare(
             indice: 2,
@@ -642,21 +435,10 @@ class _SchermataInizioState extends State<SchermataInizio> {
               onTap: widget.onSegnalazioni,
             ),
           ),
-          const SizedBox(height: 12),
-          Appare(
-            indice: 3,
-            child: _TesseraAzione(
-              icona: Icons.map_rounded,
-              titolo: s.t('Guarda la mappa', 'See the map'),
-              sottotitolo: s.t('Cosa è già stato segnalato e dove.', 'What has been reported, and where.'),
-              accento: Accento.blu,
-              onTap: widget.onMappa,
-            ),
-          ),
           const SizedBox(height: 28),
-          Appare(indice: 4, child: TitoloSezione(s.t('Scopri di più', 'Discover more'))),
+          Appare(indice: 3, child: TitoloSezione(s.t('Scopri di più', 'Discover more'))),
           Appare(
-            indice: 5,
+            indice: 4,
             child: IntrinsicHeight(
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,

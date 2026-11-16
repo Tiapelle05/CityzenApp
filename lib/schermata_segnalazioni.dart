@@ -119,12 +119,7 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> {
     }));
   }
 
-  Color _coloreStato(String? st) => switch (st) {
-    'resolved' => foresta,
-    'in_progress' => soleScuro,
-    'closed' => testoSecondario,
-    _ => cieloScuro,
-  };
+  Color _coloreStato(String? st) => coloreStatoSegnalazione(st);
 
   Widget _scheda(Map<String, dynamic> r) {
     final s = widget.s;
