@@ -108,7 +108,7 @@ class _ParkAppState extends State<ParkApp> {
     void cambiaLingua(bool valore) => setState(() => _inglese = valore);
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Treeyes',
+      title: 'Treeyes_Cityzen',
       theme: _tema,
       home: _collegato
           ? NavigazionePrincipale(
@@ -349,26 +349,11 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
         toolbarHeight: 64,
         title: Row(
           children: [
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [forestaScura, foglia],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: const [
-                  BoxShadow(color: Color(0x3317694A), blurRadius: 10, offset: Offset(0, 4)),
-                ],
-              ),
-              child: const Icon(Icons.park_rounded, color: Colors.white, size: 22),
-            ),
+            Image.asset('Assets/logo_treeyes.png', height: 40, semanticLabel: 'Treeyes_Cityzen'),
             const SizedBox(width: 11),
             const Flexible(
               child: Text(
-                'Treeyes',
+                'Treeyes_Cityzen',
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontSize: 22,

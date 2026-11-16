@@ -73,16 +73,7 @@ class _SchermataAccessoState extends State<SchermataAccesso> {
     if (mounted) widget.onCollegato();
   }
 
-  Widget _logo() => Container(
-        width: 72,
-        height: 72,
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(colors: [forestaScura, foglia], begin: Alignment.topLeft, end: Alignment.bottomRight),
-          borderRadius: BorderRadius.circular(22),
-          boxShadow: const [BoxShadow(color: Color(0x4017694A), blurRadius: 20, offset: Offset(0, 8))],
-        ),
-        child: const Icon(Icons.park_rounded, color: Colors.white, size: 40),
-      );
+  Widget _logo() => Image.asset('Assets/logo_treeyes.png', height: 96, semanticLabel: 'Treeyes_Cityzen');
 
   @override
   Widget build(BuildContext context) {
@@ -112,7 +103,7 @@ class _SchermataAccessoState extends State<SchermataAccesso> {
                   Center(child: _logo()),
                   const SizedBox(height: 18),
                   const Text(
-                    'Treeyes',
+                    'Treeyes_Cityzen',
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900, color: forestaScura, letterSpacing: -.6),
                   ),
