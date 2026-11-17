@@ -587,10 +587,6 @@ class _SchermataInizioState extends State<SchermataInizio> {
           Appare(
             child: TitoloPagina(
               titolo: s.t('Esplora il parco', 'Explore the park'),
-              descrizione: s.t(
-                'Guarda cosa succede nel parco e aiuta a migliorarlo.',
-                'See what is happening in the park and help improve it.',
-              ),
             ),
           ),
           Appare(indice: 1, child: AnteprimaMappa(s: s, onApri: widget.onMappa)),
@@ -1754,7 +1750,6 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
         children: [
           TitoloPagina(
             titolo: s.t('Segnala un problema', 'Report a problem'),
-            descrizione: s.t('Tre passi semplici: cosa, dove, invia.', 'Three simple steps: what, where, send.'),
             icona: Icons.add_a_photo_rounded,
             accento: Accento.arancio,
           ),
@@ -2076,7 +2071,6 @@ class _SchermataIdeeState extends State<SchermataIdee> {
       child: ContenitorePagina(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         TitoloPagina(
           titolo: s.t('Idee per il parco', 'Ideas for the park'),
-          descrizione: s.t('Guarda cosa propongono gli altri e aggiungi la tua idea.', 'See what others suggest and add your own idea.'),
           icona: Icons.lightbulb_rounded,
           accento: Accento.giallo,
         ),
@@ -2449,10 +2443,6 @@ class _SchermataAvvisiState extends State<SchermataAvvisi> {
           children: [
             TitoloPagina(
               titolo: s.t('Avvisi del parco', 'Park notices'),
-              descrizione: s.t(
-                'Qui trovi comunicazioni, avvisi importanti e aggiornamenti sulla manutenzione.',
-                'Find park news, important notices and maintenance updates here.',
-              ),
               icona: Icons.notifications_rounded,
               accento: Accento.viola,
             ),

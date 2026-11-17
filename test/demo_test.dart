@@ -20,11 +20,14 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     await tester.pump(const Duration(seconds: 1));
     expect(find.byType(MappaParco), findsOneWidget);
-    expect(find.byType(Segnaposto), findsWidgets);
+    // I segnaposto vicini si uniscono in gruppi: ce n'è almeno uno dei due tipi.
+    expect(
+      find.byType(Segnaposto).evaluate().length + find.byType(SegnapostoGruppo).evaluate().length,
+      greaterThan(0),
+    );
 
-    // Passando all'elenco si vedono le segnalazioni simulate.
-    await tester.tap(find.text('Elenco'));
-    await tester.pump(const Duration(seconds: 1));
+    // Il pannello sotto la mappa elenca le segnalazioni simulate.
+    expect(find.text('Segnalazioni'), findsOneWidget);
     expect(find.text('Illuminazione'), findsWidgets);
   });
 }

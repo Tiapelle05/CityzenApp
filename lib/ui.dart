@@ -231,52 +231,68 @@ class Appare extends StatelessWidget {
   }
 }
 
-/// Intestazione di pagina: icona colorata della sezione, titolo e sottotitolo.
+/// Intestazione di pagina compatta: icona colorata della sezione e titolo
+/// sulla stessa riga. [descrizione] è facoltativa e resta su una sola riga,
+/// così l'intestazione non ruba spazio al contenuto.
 class TitoloPagina extends StatelessWidget {
   final String titolo;
-  final String descrizione;
+  final String? descrizione;
   final IconData? icona;
   final Accento accento;
+  final Widget? azione;
 
   const TitoloPagina({
     super.key,
     required this.titolo,
-    required this.descrizione,
+    this.descrizione,
     this.icona,
     this.accento = Accento.verde,
+    this.azione,
   });
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(top: 6, bottom: 20),
-        child: Semantics(
-          header: true,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (icona != null) ...[
-                ExcludeSemantics(
-                  child: IconaTonda(icona!, colore: accento.forte, sfondo: accento.tinta, dimensione: 44),
-                ),
-                const SizedBox(height: 14),
-              ],
-              Text(
-                titolo,
-                style: const TextStyle(
-                  color: testo,
-                  fontSize: 28,
-                  height: 1.15,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -.6,
-                ),
+        padding: const EdgeInsets.only(top: 4, bottom: 16),
+        child: Row(
+          children: [
+            if (icona != null) ...[
+              ExcludeSemantics(
+                child: IconaTonda(icona!, colore: accento.forte, sfondo: accento.tinta, dimensione: 38),
               ),
-              const SizedBox(height: 6),
-              Text(
-                descrizione,
-                style: const TextStyle(fontSize: 15, height: 1.45, color: testoSecondario),
-              ),
+              const SizedBox(width: 12),
             ],
-          ),
+            Expanded(
+              child: Semantics(
+                header: true,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      titolo,
+                      style: const TextStyle(
+                        color: testo,
+                        fontSize: 23,
+                        height: 1.15,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -.4,
+                      ),
+                    ),
+                    if (descrizione != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        descrizione!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 13.5, color: testoSecondario),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            if (azione != null) ...[const SizedBox(width: 8), azione!],
+          ],
         ),
       );
 }
@@ -630,4 +646,171 @@ String formattaData(dynamic iso, {bool ora = false}) {
   String due(int n) => n.toString().padLeft(2, '0');
   final giorno = '${due(d.day)}/${due(d.month)}';
   return ora ? '$giorno ${due(d.hour)}:${due(d.minute)}' : giorno;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Foto
+// ─────────────────────────────────────────────────────────────────────────────
+
+final Map<String, ImageProvider> _immaginiInline = {};
+
+/// Immagine da un URL di foto: `http(s)` dal server oppure `data:` (demo).
+/// Le immagini `data:` si decodificano una volta sola e restano in memoria.
+ImageProvider? immagineDa(String? url) {
+  if (url == null || url.isEmpty) return null;
+  if (!url.startsWith('data:')) return NetworkImage(url);
+  final giaPronta = _immaginiInline[url];
+  if (giaPronta != null) return giaPronta;
+  try {
+    final img = MemoryImage(UriData.parse(url).contentAsBytes());
+    if (_immaginiInline.length > 40) _immaginiInline.clear();
+    return _immaginiInline[url] = img;
+  } catch (_) {
+    return null;
+  }
+}
+
+/// Foto che si apre a schermo intero al tocco, con un'icona che lo suggerisce.
+class FotoApribile extends StatelessWidget {
+  final String url;
+  final double altezza;
+  final String etichetta;
+
+  const FotoApribile({super.key, required this.url, this.altezza = 190, this.etichetta = 'Foto'});
+
+  @override
+  Widget build(BuildContext context) {
+    final img = immagineDa(url);
+    if (img == null) return const SizedBox.shrink();
+    return Semantics(
+      button: true,
+      image: true,
+      label: etichetta,
+      child: GestureDetector(
+        onTap: () => apriFotoSchermoIntero(context, url),
+        child: Stack(
+          children: [
+            Image(
+              image: img,
+              height: altezza,
+              width: double.infinity,
+              fit: BoxFit.cover,
+              frameBuilder: (context, child, frame, sincrono) => sincrono
+                  ? child
+                  : AnimatedOpacity(opacity: frame == null ? 0 : 1, duration: durata(context, 300), child: child),
+              errorBuilder: (_, _, _) => const SizedBox.shrink(),
+            ),
+            Positioned(
+              right: 10,
+              bottom: 10,
+              child: Container(
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(color: Colors.black.withValues(alpha: .55), shape: BoxShape.circle),
+                child: const Icon(Icons.open_in_full_rounded, size: 17, color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Mostra la foto a tutto schermo: pizzico o doppio tocco per ingrandire.
+Future<void> apriFotoSchermoIntero(BuildContext context, String url) {
+  return Navigator.of(context, rootNavigator: true).push(
+    PageRouteBuilder<void>(
+      opaque: false,
+      barrierColor: Colors.black,
+      transitionDuration: durata(context, 220),
+      reverseTransitionDuration: durata(context, 180),
+      pageBuilder: (_, _, _) => _FotoSchermoIntero(url: url),
+      transitionsBuilder: (_, animazione, _, figlio) => FadeTransition(opacity: animazione, child: figlio),
+    ),
+  );
+}
+
+class _FotoSchermoIntero extends StatefulWidget {
+  final String url;
+  const _FotoSchermoIntero({required this.url});
+
+  @override
+  State<_FotoSchermoIntero> createState() => _FotoSchermoInteroState();
+}
+
+class _FotoSchermoInteroState extends State<_FotoSchermoIntero> {
+  final TransformationController _trasformazione = TransformationController();
+  Offset _ultimoTocco = Offset.zero;
+
+  @override
+  void dispose() {
+    _trasformazione.dispose();
+    super.dispose();
+  }
+
+  void _doppioTocco() {
+    if (_trasformazione.value.getMaxScaleOnAxis() > 1.01) {
+      _trasformazione.value = Matrix4.identity();
+    } else {
+      const scala = 2.5;
+      final p = _ultimoTocco;
+      _trasformazione.value = Matrix4.identity()
+        ..translateByDouble(-p.dx * (scala - 1), -p.dy * (scala - 1), 0, 1)
+        ..scaleByDouble(scala, scala, 1, 1);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final img = immagineDa(widget.url);
+    return Scaffold(
+      backgroundColor: Colors.black,
+      // Lo Stack deve riempire lo schermo: altrimenti prende la misura del
+      // pulsante di chiusura e la foto finisce in un riquadro minuscolo.
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              onDoubleTapDown: (d) => _ultimoTocco = d.localPosition,
+              onDoubleTap: _doppioTocco,
+              child: InteractiveViewer(
+                transformationController: _trasformazione,
+                minScale: 1,
+                maxScale: 5,
+                child: Center(
+                  child: img == null
+                      ? const Icon(Icons.broken_image_outlined, color: Colors.white54, size: 48)
+                      : Image(
+                          image: img,
+                          fit: BoxFit.contain,
+                          loadingBuilder: (_, figlio, progresso) => progresso == null
+                              ? figlio
+                              : const CircularProgressIndicator(color: Colors.white),
+                          errorBuilder: (_, _, _) =>
+                              const Icon(Icons.broken_image_outlined, color: Colors.white54, size: 48),
+                        ),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            top: 0,
+            left: 0,
+            child: SafeArea(
+              child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: IconButton.filled(
+                style: IconButton.styleFrom(backgroundColor: Colors.black.withValues(alpha: .55)),
+                tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.close_rounded, color: Colors.white),
+              ),
+            ),
+          ),
+          ),
+        ],
+      ),
+    );
+  }
 }

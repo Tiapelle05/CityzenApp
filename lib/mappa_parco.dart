@@ -7,16 +7,22 @@ import 'package:latlong2/latlong.dart';
 import 'citizen_api.dart';
 import 'ui.dart';
 
-export 'package:flutter_map/flutter_map.dart' show Marker;
+export 'package:flutter_map/flutter_map.dart' show Marker, MapController, MapCamera, CameraFit;
 export 'package:latlong2/latlong.dart' show LatLng;
 
-/// Mappa reale (tile OpenStreetMap) con angoli arrotondati.
+/// Mappa reale (tile OpenStreetMap). Con [altezza] è una scheda ad angoli
+/// arrotondati; senza, riempie lo spazio disponibile a filo bordo.
 class MappaParco extends StatelessWidget {
   final LatLng centro;
   final double zoom;
   final List<Marker> marcatori;
-  final double altezza;
+  /// Livelli aggiuntivi sopra le tile (es. [LivelloGruppi]).
+  final List<Widget> livelli;
+  final double? altezza;
   final bool interattiva;
+  final MapController? controller;
+  final EdgeInsets margineAttribuzione;
+  final Alignment allineamentoAttribuzione;
   final void Function(LatLng punto)? onTocco;
 
   const MappaParco({
@@ -24,10 +30,16 @@ class MappaParco extends StatelessWidget {
     required this.centro,
     this.zoom = 16,
     this.marcatori = const [],
+    this.livelli = const [],
     this.altezza = 420,
     this.interattiva = true,
+    this.controller,
+    this.margineAttribuzione = EdgeInsets.zero,
+    this.allineamentoAttribuzione = Alignment.bottomRight,
     this.onTocco,
   });
+
+  static const double zoomMassimo = 19;
 
   /// Centro del parco in uso; se manca, il primo punto disponibile o Milano.
   static LatLng centroParco([Iterable<LatLng> punti = const []]) {
@@ -46,6 +58,31 @@ class MappaParco extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final mappa = FlutterMap(
+      mapController: controller,
+      options: MapOptions(
+        initialCenter: centro,
+        initialZoom: zoom,
+        minZoom: 13,
+        maxZoom: zoomMassimo,
+        backgroundColor: menta,
+        interactionOptions: InteractionOptions(
+          flags: interattiva ? InteractiveFlag.all & ~InteractiveFlag.rotate : InteractiveFlag.none,
+        ),
+        onTap: onTocco == null ? null : (_, punto) => onTocco!(punto),
+      ),
+      children: [
+        TileLayer(
+          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+          userAgentPackageName: 'it.tryees.app',
+          maxNativeZoom: 19,
+        ),
+        if (marcatori.isNotEmpty) MarkerLayer(markers: marcatori),
+        ...livelli,
+        Padding(padding: margineAttribuzione, child: _Attribuzione(allineamentoAttribuzione)),
+      ],
+    );
+    if (altezza == null) return ColoredBox(color: menta, child: mappa);
     return Container(
       height: altezza,
       clipBehavior: Clip.antiAlias,
@@ -54,39 +91,19 @@ class MappaParco extends StatelessWidget {
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: bordo),
       ),
-      child: FlutterMap(
-        options: MapOptions(
-          initialCenter: centro,
-          initialZoom: zoom,
-          minZoom: 13,
-          maxZoom: 19,
-          backgroundColor: menta,
-          interactionOptions: InteractionOptions(
-            flags: interattiva ? InteractiveFlag.all & ~InteractiveFlag.rotate : InteractiveFlag.none,
-          ),
-          onTap: onTocco == null ? null : (_, punto) => onTocco!(punto),
-        ),
-        children: [
-          TileLayer(
-            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-            userAgentPackageName: 'it.tryees.app',
-            maxNativeZoom: 19,
-          ),
-          MarkerLayer(markers: marcatori),
-          const _Attribuzione(),
-        ],
-      ),
+      child: mappa,
     );
   }
 }
 
 class _Attribuzione extends StatelessWidget {
-  const _Attribuzione();
+  final Alignment allineamento;
+  const _Attribuzione(this.allineamento);
 
   @override
   Widget build(BuildContext context) {
     return Align(
-      alignment: Alignment.bottomRight,
+      alignment: allineamento,
       child: Container(
         margin: const EdgeInsets.all(6),
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -95,6 +112,172 @@ class _Attribuzione extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Livello che raggruppa i punti troppo vicini sullo schermo in un unico
+/// cerchio con il numero di elementi, così ogni segnaposto resta toccabile.
+/// Si ricalcola a ogni zoom: avvicinandosi i gruppi si separano.
+class LivelloGruppi<T> extends StatelessWidget {
+  final List<(T, LatLng)> punti;
+  final Widget Function(T dato) segnaposto;
+  /// Tocco su un gruppo; se nullo il gruppo è solo decorativo.
+  final void Function(List<(T, LatLng)> gruppo)? onGruppo;
+  /// Il gruppo contiene l'elemento scelto: lo si evidenzia.
+  final bool Function(T dato)? scelto;
+  final String Function(int quanti)? etichettaGruppo;
+
+  const LivelloGruppi({
+    super.key,
+    required this.punti,
+    required this.segnaposto,
+    this.onGruppo,
+    this.scelto,
+    this.etichettaGruppo,
+  });
+
+  /// Distanza minima in pixel sotto la quale due segnaposto si uniscono.
+  static const double soglia = 46;
+
+  /// Raggruppa [punti] allo [zoom] indicato (in pixel della proiezione).
+  static List<List<(T, LatLng)>> raggruppa<T>(MapCamera camera, List<(T, LatLng)> punti, double zoom) {
+    final membri = <List<(T, LatLng)>>[];
+    final somme = <Offset>[];
+    for (final p in punti) {
+      final px = camera.projectAtZoom(p.$2, zoom);
+      var aggiunto = false;
+      for (var i = 0; i < membri.length; i++) {
+        final centro = somme[i] / membri[i].length.toDouble();
+        if ((centro - px).distance < soglia) {
+          membri[i].add(p);
+          somme[i] += px;
+          aggiunto = true;
+          break;
+        }
+      }
+      if (!aggiunto) {
+        membri.add([p]);
+        somme.add(px);
+      }
+    }
+    return membri;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final camera = MapCamera.of(context);
+    final gruppi = raggruppa(camera, punti, camera.zoom);
+    // I gruppi si disegnano sopra i segnaposto singoli; quello scelto in cima.
+    int peso(List<(T, LatLng)> g) =>
+        (g.length > 1 ? 1 : 0) + (scelto != null && g.any((e) => scelto!(e.$1)) ? 2 : 0);
+    gruppi.sort((a, b) => peso(a) - peso(b));
+
+    return MarkerLayer(
+      markers: [
+        for (final g in gruppi)
+          if (g.length == 1)
+            Marker(
+              point: g.first.$2,
+              width: Segnaposto.dimensione,
+              height: Segnaposto.dimensione,
+              child: segnaposto(g.first.$1),
+            )
+          else
+            Marker(
+              point: LatLng(
+                g.map((e) => e.$2.latitude).reduce((a, b) => a + b) / g.length,
+                g.map((e) => e.$2.longitude).reduce((a, b) => a + b) / g.length,
+              ),
+              width: 58,
+              height: 58,
+              child: Semantics(
+                button: onGruppo != null,
+                label: etichettaGruppo?.call(g.length) ?? '${g.length}',
+                excludeSemantics: true,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: onGruppo == null ? null : () => onGruppo!(g),
+                  child: SegnapostoGruppo(
+                    quanti: g.length,
+                    selezionato: scelto != null && g.any((e) => scelto!(e.$1)),
+                  ),
+                ),
+              ),
+            ),
+      ],
+    );
+  }
+}
+
+/// Cerchio scuro con il numero di segnalazioni raggruppate.
+class SegnapostoGruppo extends StatelessWidget {
+  final int quanti;
+  final bool selezionato;
+  const SegnapostoGruppo({super.key, required this.quanti, this.selezionato = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final lato = 38 + (quanti - 2).clamp(0, 8) * 1.5;
+    return Center(
+      child: Container(
+        width: lato,
+        height: lato,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: forestaScura,
+          shape: BoxShape.circle,
+          border: Border.all(color: selezionato ? sole : Colors.white, width: selezionato ? 4 : 3),
+          boxShadow: [
+            BoxShadow(color: forestaScura.withValues(alpha: .25), spreadRadius: 5),
+            BoxShadow(color: Colors.black.withValues(alpha: .25), blurRadius: 8, offset: const Offset(0, 3)),
+          ],
+        ),
+        child: Text(
+          quanti > 99 ? '99+' : '$quanti',
+          style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w900),
+        ),
+      ),
+    );
+  }
+}
+
+/// Sposta la mappa con un'animazione morbida verso un centro e uno zoom.
+class AnimatoreMappa {
+  final MapController controller;
+  final AnimationController _anim;
+  LatLng _da = const LatLng(0, 0), _a = const LatLng(0, 0);
+  double _zoomDa = 0, _zoomA = 0;
+
+  AnimatoreMappa(this.controller, TickerProvider vsync)
+      : _anim = AnimationController(vsync: vsync, duration: const Duration(milliseconds: 450)) {
+    _anim.addListener(() {
+      final t = Curves.easeInOutCubic.transform(_anim.value);
+      controller.move(
+        LatLng(
+          _da.latitude + (_a.latitude - _da.latitude) * t,
+          _da.longitude + (_a.longitude - _da.longitude) * t,
+        ),
+        _zoomDa + (_zoomA - _zoomDa) * t,
+      );
+    });
+  }
+
+  void vola(LatLng centro, double zoom, {bool animato = true}) {
+    final cam = controller.camera;
+    _da = cam.center;
+    _zoomDa = cam.zoom;
+    _a = centro;
+    _zoomA = zoom.clamp(13, MappaParco.zoomMassimo).toDouble();
+    if (!animato) {
+      _anim.stop();
+      controller.move(_a, _zoomA);
+      return;
+    }
+    _anim.forward(from: 0);
+  }
+
+  void ferma() => _anim.stop();
+
+  void dispose() => _anim.dispose();
 }
 
 /// Segnaposto rotondo con icona, nel colore indicato.
@@ -232,17 +415,14 @@ class _AnteprimaMappaState extends State<AnteprimaMappa> {
                 zoom: 15.5,
                 interattiva: false,
                 centro: MappaParco.centroParco(punti.map((e) => e.$2)),
-                marcatori: [
-                  for (final (r, p) in punti)
-                    Marker(
-                      point: p,
-                      width: Segnaposto.dimensione,
-                      height: Segnaposto.dimensione,
-                      child: Segnaposto(
-                        icona: iconaCategoria(r['category'] as String?),
-                        colore: coloreStatoSegnalazione(r['status'] as String?),
-                      ),
+                livelli: [
+                  LivelloGruppi<Map<String, dynamic>>(
+                    punti: punti,
+                    segnaposto: (r) => Segnaposto(
+                      icona: iconaCategoria(r['category'] as String?),
+                      colore: coloreStatoSegnalazione(r['status'] as String?),
                     ),
+                  ),
                 ],
               ),
             ),
