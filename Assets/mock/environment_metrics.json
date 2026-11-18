@@ -1,0 +1,74 @@
+[
+  {
+    "metric": "temperature",
+    "label": "Temperatura",
+    "unit": "°C",
+    "decimals": 1,
+    "levels": null
+  },
+  {
+    "metric": "humidity",
+    "label": "Umidità",
+    "unit": "%",
+    "decimals": 0,
+    "levels": null
+  },
+  {
+    "metric": "light",
+    "label": "Luminosità",
+    "unit": "lx",
+    "decimals": 0,
+    "levels": null
+  },
+  {
+    "metric": "dust",
+    "label": "Polveri sottili",
+    "unit": "µg/m³",
+    "decimals": 0,
+    "levels": [
+      {
+        "max": 35.0,
+        "level": "good",
+        "text": "Buona"
+      },
+      {
+        "max": 75.0,
+        "level": "moderate",
+        "text": "Moderata"
+      },
+      {
+        "max": 150.0,
+        "level": "poor",
+        "text": "Scarsa"
+      },
+      {
+        "max": null,
+        "level": "bad",
+        "text": "Pessima"
+      }
+    ]
+  },
+  {
+    "metric": "gas",
+    "label": "Gas combustibili e fumo",
+    "unit": "",
+    "decimals": 2,
+    "levels": [
+      {
+        "max": 1.5,
+        "level": "good",
+        "text": "Normale"
+      },
+      {
+        "max": 3.0,
+        "level": "poor",
+        "text": "Elevato"
+      },
+      {
+        "max": null,
+        "level": "bad",
+        "text": "Molto elevato"
+      }
+    ]
+  }
+]

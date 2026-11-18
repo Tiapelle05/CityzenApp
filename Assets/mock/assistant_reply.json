@@ -1,0 +1,17 @@
+{
+  "answer": "Aria buona. Le polveri sottili sono a 23 µg/m³, qualità buona; l'indice del gas è 0,99 (normale; vale circa 1 in aria pulita) (lettura delle 16:12). Valori stimati da sensori a basso costo, non certificati.",
+  "sources": [
+    {
+      "type": "environment",
+      "id": null,
+      "park_id": null,
+      "station_id": 1,
+      "metric": null,
+      "from": null,
+      "to": null
+    }
+  ],
+  "mode": "rules",
+  "model": null,
+  "disclaimer": "Risposte generate automaticamente dai dati dell'app. Valori stimati da sensori a basso costo, non certificati."
+}

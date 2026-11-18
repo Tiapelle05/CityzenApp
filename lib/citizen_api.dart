@@ -7,6 +7,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+import 'api/http_treeyes_api.dart';
+import 'api/mock_treeyes_api.dart';
+import 'api/treeyes_api.dart';
 import 'dati_simulati.dart';
 
 /// Client REST per le API cittadino di Tryees.
@@ -95,6 +98,7 @@ class CitizenApi {
       await prefs.remove(_parkIdKey);
     }
     _serverSalvato = url;
+    _httpTreeyes.dimenticaMetriche();
     await prefs.setString(_serverKey, url);
     _demoScelto = false;
     demoMode = false;
@@ -383,9 +387,37 @@ class CitizenApi {
     return '$baseUrl${path.startsWith('/') ? '' : '/'}$path';
   }
 
+  // --- Ambiente e assistente (TreeyesApi) ----------------------------------
+  late final MockTreeyesApi _mockTreeyes = MockTreeyesApi();
+  late final MockTreeyesApi _mockTest = MockTreeyesApi(ritardi: false);
+  late final HttpTreeyesApi _httpTreeyes = HttpTreeyesApi(this);
+
+  /// Dati ambientali e assistente: mock (Assets/mock) in demo e nei test, server altrimenti.
+  TreeyesApi get treeyes => testMode ? _mockTest : demoMode ? _mockTreeyes : _httpTreeyes;
+
+  /// Parco a cui riferire le chiamate di [treeyes].
+  Future<int> parcoInUso() async {
+    if (demoMode || testMode) return DatiSimulati.idParco;
+    await _ensureReady();
+    return _requirePark();
+  }
+
+  /// Richiesta autenticata generica (token, nuovo tentativo dopo il 401, errori come [ApiException]).
+  /// [query] diventa la query string; [timeout] sostituisce i 20 secondi predefiniti.
+  Future<dynamic> richiesta(String method, String path,
+      {Map<String, dynamic>? body, Map<String, String>? query, Duration? timeout}) async {
+    await _ensureReady();
+    final completo = query == null || query.isEmpty ? path : '$path?${Uri(queryParameters: query).query}';
+    return _request(method, completo, body: body, timeout: timeout);
+  }
+
   // --- Aggiornamenti live (WS /citizen/ws) ---------------------------------
   final StreamController<Map<String, dynamic>> _events = StreamController.broadcast();
   Stream<Map<String, dynamic>> get events => _events.stream;
+
+  /// Inoltra un messaggio come se arrivasse dal WebSocket (solo per i test).
+  @visibleForTesting
+  void emettiEvento(Map<String, dynamic> evento) => _events.add(evento);
   WebSocketChannel? _ws;
   Timer? _wsPing;
   Timer? _wsRetry;
@@ -394,7 +426,8 @@ class CitizenApi {
 
   /// Apre il WebSocket (idempotente). Messaggi: {type, data} con type
   /// report_created | report_status_changed | report_updated | notice_created |
-  /// notice_ended | park_status_changed | danger_alert. Si inoltrano solo quelli del parco in uso (o senza park_id).
+  /// notice_ended | park_status_changed | danger_alert | environment_reading |
+  /// environment_alert | environment_alert_ended (i type sconosciuti si ignorano). Si inoltrano solo quelli del parco in uso (o senza park_id).
   /// Se il token non c'è ancora, si connette appena initialize() riesce.
   void connectLive() {
     if (testMode || demoMode) return; // in demo gli eventi arrivano da DatiSimulati
@@ -451,22 +484,22 @@ class CitizenApi {
   Future<dynamic> _get(String path) => _request('GET', path);
 
   Future<dynamic> _request(String method, String path,
-      {Map<String, dynamic>? body}) async {
+      {Map<String, dynamic>? body, Duration? timeout}) async {
     if (_token == null) await initialize();
-    var response = await _send(method, path, body);
+    var response = await _send(method, path, body, timeout);
     if (response.statusCode == 401) {
       // token scaduto o non valido: nuova registrazione e un solo nuovo tentativo
       await _reRegister();
-      response = await _send(method, path, body);
+      response = await _send(method, path, body, timeout);
     }
     return _decode(response);
   }
 
-  Future<http.Response> _send(String method, String path, Map<String, dynamic>? body) {
+  Future<http.Response> _send(String method, String path, Map<String, dynamic>? body, [Duration? timeout]) {
     final headers = <String, String>{'Authorization': 'Bearer ${_requireToken()}'};
     if (body != null) headers['Content-Type'] = 'application/json';
     final uri = _uri(path);
-    const t = Duration(seconds: 20);
+    final t = timeout ?? const Duration(seconds: 20);
     switch (method) {
       case 'GET':
         return http.get(uri, headers: headers).timeout(t);
@@ -498,13 +531,12 @@ class CitizenApi {
       } else if (response.statusCode == 403) {
         message = 'Questa installazione è stata bloccata.';
       }
-      if (response.statusCode == 429) {
-        final wait = int.tryParse(response.headers['retry-after'] ?? '');
-        if (wait != null) {
-          message = '$message (riprova tra ${(wait / 60).ceil()} min)';
-        }
+      final wait = int.tryParse(response.headers['retry-after'] ?? '');
+      if (response.statusCode == 429 && wait != null) {
+        message = '$message (riprova tra ${(wait / 60).ceil()} min)';
       }
-      throw ApiException(message, statusCode: response.statusCode);
+      throw ApiException(message, statusCode: response.statusCode, retryAfter: wait,
+          code: data is Map && data['detail'] is String ? data['detail'] as String : null);
     }
     return data;
   }
@@ -512,6 +544,9 @@ class CitizenApi {
   Uri _uri(String path) => Uri.parse('$baseUrl$path');
   int _requirePark() => _parkId ?? (throw const ApiException('Parco non disponibile.'));
   String _requireToken() => _token ?? (throw const ApiException('Installazione non registrata.'));
+
+  /// Messaggio leggibile per un errore di rete o del backend.
+  String descriviErrore(Object error) => _cleanError(error);
 
   String _cleanError(Object error) {
     if (error is ApiException) return error.message;
@@ -528,7 +563,11 @@ class CitizenApi {
 class ApiException implements Exception {
   final String message;
   final int? statusCode;
-  const ApiException(this.message, {this.statusCode});
+  /// Secondi indicati da `Retry-After` (429), se presenti.
+  final int? retryAfter;
+  /// `detail` testuale del backend (es. `assistant_busy`).
+  final String? code;
+  const ApiException(this.message, {this.statusCode, this.retryAfter, this.code});
   @override
   String toString() => message;
 }

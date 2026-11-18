@@ -49,6 +49,7 @@ class Accento {
   static const blu = Accento(cielo, cieloScuro, cieloChiaro);
   static const giallo = Accento(sole, soleScuro, soleChiaro);
   static const viola = Accento(lavanda, lavanda, lavandaChiaro);
+  static const acqua = Accento(Color(0xFF14A3A3), Color(0xFF0B6E6E), Color(0xFFDDF4F2));
 }
 
 /// Durata delle animazioni, azzerata se l'utente le disattiva.
@@ -190,9 +191,15 @@ class ContenitorePagina extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
-        builder: (context, constraints) => Center(
+        // In alto, non al centro: una pagina corta non deve galleggiare a metà schermo.
+        builder: (context, constraints) => Align(
+          alignment: Alignment.topCenter,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 760),
+            // Altezza piena: il trascinamento per aggiornare funziona anche sotto il contenuto.
+            constraints: BoxConstraints(
+              maxWidth: 760,
+              minHeight: constraints.maxHeight.isFinite ? constraints.maxHeight : 0,
+            ),
             child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
               padding: EdgeInsets.fromLTRB(

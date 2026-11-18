@@ -15,7 +15,11 @@ import 'ui.dart';
 /// Si aggiorna in tempo reale dal WebSocket /citizen/ws.
 class SchermataSegnalazioni extends StatefulWidget {
   final Copie s;
-  const SchermataSegnalazioni({super.key, required this.s});
+  /// Segnalazione da aprire appena l'elenco è caricato (es. dalle fonti dell'assistente).
+  final int? apri;
+  /// Parte dal filtro «solo le mie».
+  final bool soloMie;
+  const SchermataSegnalazioni({super.key, required this.s, this.apri, this.soloMie = false});
 
   @override
   State<SchermataSegnalazioni> createState() => _SchermataSegnalazioniState();
@@ -35,7 +39,7 @@ String _statoDi(Map<String, dynamic> r) {
 }
 
 class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with TickerProviderStateMixin {
-  bool _soloMie = false;
+  late bool _soloMie = widget.soloMie;
   /// Stato scelto nei filtri; nullo = tutti.
   String? _filtroStato;
   /// Segnalazione scelta (per id).
@@ -62,7 +66,7 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
   @override
   void initState() {
     super.initState();
-    unawaited(_carica());
+    unawaited(_carica().then((_) => _apriRichiesta()));
     CitizenApi.instance.connectLive();
     _live = CitizenApi.instance.events.listen((e) {
       final type = e['type'];
@@ -116,6 +120,14 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
         });
       }
     }
+  }
+
+  /// Apre la segnalazione indicata in [SchermataSegnalazioni.apri], anche se non è in elenco.
+  Future<void> _apriRichiesta() async {
+    final id = widget.apri;
+    if (id == null || !mounted) return;
+    if (_items.any((r) => r['id'] == id)) _seleziona(id, avvicina: true);
+    await _dettaglio(_items.where((r) => r['id'] == id).firstOrNull ?? {'id': id});
   }
 
   /// Il server reale mette la posizione solo nel dettaglio della segnalazione:

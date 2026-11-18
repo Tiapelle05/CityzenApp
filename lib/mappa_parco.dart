@@ -339,8 +339,9 @@ Color coloreStatoSegnalazione(String? stato) => switch (stato) {
 class AnteprimaMappa extends StatefulWidget {
   final Copie s;
   final VoidCallback? onApri;
+  final double altezza;
 
-  const AnteprimaMappa({super.key, required this.s, this.onApri});
+  const AnteprimaMappa({super.key, required this.s, this.onApri, this.altezza = 230});
 
   @override
   State<AnteprimaMappa> createState() => _AnteprimaMappaState();
@@ -411,7 +412,7 @@ class _AnteprimaMappaState extends State<AnteprimaMappa> {
           children: [
             AbsorbPointer(
               child: MappaParco(
-                altezza: 230,
+                altezza: widget.altezza,
                 zoom: 15.5,
                 interattiva: false,
                 centro: MappaParco.centroParco(punti.map((e) => e.$2)),
