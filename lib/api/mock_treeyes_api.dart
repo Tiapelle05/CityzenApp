@@ -92,6 +92,15 @@ class MockTreeyesApi implements TreeyesApi {
     await _attesa(1400);
     final base = AssistantReply.fromJson(Map<String, dynamic>.from(await _json('assistant_reply.json') as Map));
     final q = question.toLowerCase();
+    // Presentazione, come la regola del backend (nome uguale a `nomeAssistente`)
+    if (['chi sei', 'come ti chiami', 'il tuo nome', 'cosa sai fare', 'cosa puoi fare', 'presentati'].any(q.contains)) {
+      return _risposta(
+        base,
+        'Sono Parky, l’assistente del parco. Posso dirti com’è l’aria, se ci sono avvisi, '
+        'a che punto sono le tue segnalazioni e cosa puoi segnalare.',
+        const [],
+      );
+    }
     if (q.contains('avvis')) {
       final avvisi = await DatiSimulati.instance.avvisi();
       return _risposta(
