@@ -15,6 +15,7 @@ export 'ui.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   try {
     await CitizenApi.instance.initialize().timeout(const Duration(seconds: 5));
   } catch (_) {
