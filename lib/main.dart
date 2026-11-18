@@ -376,23 +376,19 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
           child: const Row(children: [Text('🇬🇧'), SizedBox(width: 10), Text('English')]),
         ),
       ],
+      // Solo la sigla, in un cerchio come la campanella: lascia spazio al marchio.
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        width: 40,
+        height: 40,
+        alignment: Alignment.center,
         decoration: BoxDecoration(
           color: superficie,
-          borderRadius: BorderRadius.circular(20),
+          shape: BoxShape.circle,
           border: Border.all(color: bordo),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.translate_rounded, size: 17, color: foresta),
-            const SizedBox(width: 5),
-            Text(
-              widget.inglese ? 'EN' : 'IT',
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: testo, letterSpacing: .4),
-            ),
-          ],
+        child: Text(
+          widget.inglese ? 'EN' : 'IT',
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: foresta, letterSpacing: .4),
         ),
       ),
     );
@@ -453,62 +449,49 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
     }
   }
 
-  /// Interruttore a due segmenti Demo | Server sempre visibile nella barra in alto.
-  /// Toccare il profilo non attivo lo attiva subito; toccare quello attivo apre
-  /// i dettagli del collegamento (per cambiare server).
+  /// Tasto unico Demo/Server nella barra in alto: mostra il profilo attivo e un
+  /// tocco passa all'altro. Una pressione lunga apre i dettagli del collegamento
+  /// (per cambiare server).
   Widget _pulsanteCollegamento(Copie s) {
-    Widget segmento({required bool demo, required IconData icona, required String etichetta}) {
-      final attivo = widget.demo == demo;
-      final colore = demo ? lavanda : foresta;
-      return Semantics(
-        button: true,
-        selected: attivo,
-        label: etichetta,
-        child: Tooltip(
-          message: attivo
-              ? s.t('Dettagli collegamento', 'Connection details')
-              : s.t('Passa a: $etichetta', 'Switch to: $etichetta'),
+    final demo = widget.demo;
+    final colore = demo ? lavanda : foresta;
+    final etichetta = demo ? 'Demo' : 'Server';
+    final altro = demo ? 'Server' : 'Demo';
+    return Semantics(
+      button: true,
+      label: s.t('Modalità $etichetta', '$etichetta mode'),
+      hint: s.t('Tocca per passare a $altro', 'Tap to switch to $altro'),
+      excludeSemantics: true,
+      child: Tooltip(
+        message: s.t(
+          'Tocca per passare a $altro · tieni premuto per i dettagli',
+          'Tap to switch to $altro · long press for details',
+        ),
+        child: Material(
+          color: demo ? lavandaChiaro : menta,
+          shape: StadiumBorder(side: BorderSide(color: colore.withValues(alpha: .35))),
+          clipBehavior: Clip.antiAlias,
           child: InkWell(
-            borderRadius: BorderRadius.circular(16),
-            onTap: _cambioProfilo ? null : () => attivo ? _apriCollegamento(s) : _cambiaProfilo(demo),
-            child: AnimatedContainer(
-              duration: durata(context, 200),
-              constraints: const BoxConstraints(minHeight: 32, minWidth: 36),
-              padding: EdgeInsets.symmetric(horizontal: attivo ? 10 : 8, vertical: 6),
-              decoration: BoxDecoration(
-                color: attivo ? (demo ? lavandaChiaro : menta) : Colors.transparent,
-                borderRadius: BorderRadius.circular(16),
-              ),
+            onTap: _cambioProfilo ? null : () => _cambiaProfilo(!demo),
+            onLongPress: _cambioProfilo ? null : () => _apriCollegamento(s),
+            child: Container(
+              constraints: const BoxConstraints(minHeight: 40),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Row(mainAxisSize: MainAxisSize.min, children: [
-                if (_cambioProfilo && !attivo)
+                if (_cambioProfilo)
                   SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: colore))
                 else
-                  Icon(icona, size: 17, color: attivo ? colore : testoTenue),
-                if (attivo) ...[
-                  const SizedBox(width: 5),
-                  Text(
-                    etichetta.toUpperCase(),
-                    style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w900, color: colore, letterSpacing: .5),
-                  ),
-                ],
+                  Icon(demo ? Icons.science_rounded : Icons.cloud_done_rounded, size: 18, color: colore),
+                const SizedBox(width: 6),
+                Text(
+                  etichetta.toUpperCase(),
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: colore, letterSpacing: .5),
+                ),
               ]),
             ),
           ),
         ),
-      );
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        color: superficie,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: bordo),
       ),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        segmento(demo: true, icona: Icons.science_rounded, etichetta: 'Demo'),
-        segmento(demo: false, icona: Icons.cloud_done_outlined, etichetta: 'Server'),
-      ]),
     );
   }
 
@@ -598,7 +581,7 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
         // troncarsi: così resta leggibile accanto a Demo|Server, lingua e avvisi.
         title: Row(
           children: [
-            Image.asset('Assets/logo_treeyes.png', height: 36, semanticLabel: 'Treeyes_Cityzen'),
+            Image.asset('Assets/logo_treeyes.png', height: 40, semanticLabel: 'Treeyes_Cityzen'),
             const SizedBox(width: 8),
             const Flexible(
               child: FittedBox(
@@ -611,7 +594,7 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
                     Text(
                       'Treeyes',
                       style: TextStyle(
-                        fontSize: 21,
+                        fontSize: 23,
                         height: 1.05,
                         fontWeight: FontWeight.w800,
                         color: forestaScura,
@@ -621,7 +604,7 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
                     Text(
                       'CITYZEN',
                       style: TextStyle(
-                        fontSize: 10.5,
+                        fontSize: 11.5,
                         height: 1.2,
                         fontWeight: FontWeight.w800,
                         color: foresta,
@@ -807,50 +790,76 @@ class _SchermataInizioState extends State<SchermataInizio> {
       ),
     ];
 
+    // La Home riempie lo schermo: la mappa prende tutto lo spazio che resta.
+    // Su schermi bassi la pagina ha un'altezza minima e scorre.
     return RefreshIndicator(
       onRefresh: _aggiorna,
-      child: ContenitorePagina(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Appare(
-              child: TitoloPagina(
-                titolo: _saluto(s),
-                descrizione: s.t('Ecco il parco in questo momento', 'Here is the park right now'),
-              ),
-            ),
-            if (ambiente != null) BannerAllerteAmbiente(stato: ambiente, s: s, onApri: _apriAmbiente),
-            Appare(
-              indice: 1,
-              child: Row(
-                children: [
-                  for (final (i, sc) in scorciatoie.indexed) ...[
-                    if (i > 0) const SizedBox(width: 10),
-                    Expanded(child: sc),
-                  ],
-                ],
-              ),
-            ),
-            if (ambiente != null)
-              Appare(
-                indice: 2,
-                child: ListenableBuilder(
-                  listenable: ambiente,
-                  builder: (context, figlio) =>
-                      (ambiente.ambiente?.stations.isNotEmpty ?? false) ? figlio! : const SizedBox.shrink(),
+      child: LayoutBuilder(
+        builder: (context, vincoli) {
+          final stretto = vincoli.maxWidth < 380;
+          return SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 760),
+                child: SizedBox(
+                  height: vincoli.maxHeight < 600 ? 600 : vincoli.maxHeight,
                   child: Padding(
-                    padding: const EdgeInsets.only(top: 14),
-                    child: SchedaAriaParco(stato: ambiente, s: s, onApri: _apriAmbiente, compatta: true),
+                    padding: EdgeInsets.fromLTRB(stretto ? 16 : 20, 4, stretto ? 16 : 20, 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Appare(
+                          child: TitoloPagina(
+                            titolo: _saluto(s),
+                            descrizione: s.t('Ecco il parco in questo momento', 'Here is the park right now'),
+                          ),
+                        ),
+                        if (ambiente != null) BannerAllerteAmbiente(stato: ambiente, s: s, onApri: _apriAmbiente),
+                        Appare(
+                          indice: 1,
+                          child: Row(
+                            children: [
+                              for (final (i, sc) in scorciatoie.indexed) ...[
+                                if (i > 0) const SizedBox(width: 10),
+                                Expanded(child: sc),
+                              ],
+                            ],
+                          ),
+                        ),
+                        if (ambiente != null)
+                          Appare(
+                            indice: 2,
+                            child: ListenableBuilder(
+                              listenable: ambiente,
+                              builder: (context, figlio) =>
+                                  (ambiente.ambiente?.stations.isNotEmpty ?? false) ? figlio! : const SizedBox.shrink(),
+                              child: Padding(
+                                padding: const EdgeInsets.only(top: 14),
+                                child: SchedaAriaParco(stato: ambiente, s: s, onApri: _apriAmbiente, compatta: true),
+                              ),
+                            ),
+                          ),
+                        const SizedBox(height: 14),
+                        Expanded(
+                          child: Appare(
+                            indice: 3,
+                            child: AnteprimaMappa(
+                              key: ValueKey(_aggiornamenti),
+                              s: s,
+                              onApri: widget.onMappa,
+                              altezza: double.infinity,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            const SizedBox(height: 14),
-            Appare(
-              indice: 3,
-              child: AnteprimaMappa(key: ValueKey(_aggiornamenti), s: s, onApri: widget.onMappa, altezza: 160),
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
