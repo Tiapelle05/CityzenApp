@@ -283,7 +283,7 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
         ),
       ],
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
           color: superficie,
           borderRadius: BorderRadius.circular(20),
@@ -292,8 +292,8 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.translate_rounded, size: 18, color: foresta),
-            const SizedBox(width: 6),
+            const Icon(Icons.translate_rounded, size: 17, color: foresta),
+            const SizedBox(width: 5),
             Text(
               widget.inglese ? 'EN' : 'IT',
               style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: testo, letterSpacing: .4),
@@ -447,21 +447,43 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
 
     return Scaffold(
       appBar: AppBar(
-        titleSpacing: 20,
+        titleSpacing: 16,
         toolbarHeight: 64,
+        // Marchio su due righe (Treeyes / CITYZEN) che si rimpicciolisce invece di
+        // troncarsi: così resta leggibile accanto a Demo|Server e alla lingua.
         title: Row(
           children: [
-            Image.asset('Assets/logo_treeyes.png', height: 40, semanticLabel: 'Treeyes_Cityzen'),
-            const SizedBox(width: 11),
+            Image.asset('Assets/logo_treeyes.png', height: 38, semanticLabel: 'Treeyes_Cityzen'),
+            const SizedBox(width: 9),
             const Flexible(
-              child: Text(
-                'Treeyes_Cityzen',
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  color: forestaScura,
-                  letterSpacing: -.4,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Treeyes',
+                      style: TextStyle(
+                        fontSize: 21,
+                        height: 1.05,
+                        fontWeight: FontWeight.w800,
+                        color: forestaScura,
+                        letterSpacing: -.4,
+                      ),
+                    ),
+                    Text(
+                      'CITYZEN',
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        height: 1.2,
+                        fontWeight: FontWeight.w800,
+                        color: foresta,
+                        letterSpacing: 2.2,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -473,7 +495,7 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
             const SizedBox(width: 8),
           ],
           _selettoreLingua(s),
-          const SizedBox(width: 16),
+          const SizedBox(width: 12),
         ],
       ),
       body: SafeArea(
