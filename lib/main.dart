@@ -115,6 +115,20 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
 
   int _pagina = pInizio;
 
+  /// Schede aperte almeno una volta: le altre non si costruiscono finché non
+  /// servono (all'avvio non partono mappa, chat e caricamenti delle altre schede).
+  final Set<int> _visitate = {pInizio};
+
+  /// +1 se la nuova scheda è a destra della precedente, -1 se a sinistra:
+  /// il contenuto entra dal lato da cui si arriva.
+  double _direzione = 1;
+
+  /// Pagine già costruite e i dati da cui dipendono: finché non cambiano si
+  /// riusa lo stesso widget e Flutter non ricostruisce le schede a ogni
+  /// aggiornamento della barra (cambio scheda, numero di avvisi…).
+  final List<Widget?> _pagineCostruite = List.filled(5, null);
+  Object? _firmaPagine;
+
   /// Dopo un invio la mappa si apre su «Mie».
   bool _mappaMie = false;
   /// Cresce a ogni segnalazione inviata: la mappa si ricarica.
@@ -128,6 +142,9 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
     duration: const Duration(milliseconds: 320),
     value: 1,
   );
+  /// Curva del cambio scheda, creata una volta sola (non a ogni build).
+  late final Animation<double> _curvaTransizione =
+      _transizione.drive(CurveTween(curve: Curves.easeOutCubic));
 
   StreamSubscription<Map<String, dynamic>>? _live;
   /// Dati ambientali condivisi da Home, schermata Ambiente e assistente.
@@ -301,7 +318,11 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
     if (indice != pAssistente) FocusManager.instance.primaryFocus?.unfocus();
     if (indice != _pagina) {
       HapticFeedback.selectionClick();
-      setState(() => _pagina = indice);
+      setState(() {
+        _direzione = indice > _pagina ? 1 : -1;
+        _pagina = indice;
+        _visitate.add(indice);
+      });
       if (!MediaQuery.of(context).disableAnimations) _transizione.forward(from: 0);
     }
     // GET periodico dei dati ambientali solo mentre Home o Aria sono visibili.
@@ -526,38 +547,60 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
     );
   }
 
+  Widget _costruisciPagina(int indice, Copie s) => switch (indice) {
+        pInizio => SchermataInizio(
+            key: ValueKey('inizio-$_invii'),
+            s: s,
+            ambiente: _ambiente,
+            onSegnalazioni: () => _vaiA(pSegnala),
+            onMappa: () => _vaiA(pMappa),
+            onAria: () => _vaiA(pAria),
+            onIdee: () => _apriIdee(s),
+            onAvvisi: () => _apriAvvisi(s),
+            onMie: () => _apriPagina(context, null, SchermataSegnalazioni(s: s, soloMie: true)),
+          ),
+        pSegnala => SchermataSegnalazione(
+            s: s,
+            onInviata: () {
+              // La mappa si ricarica e mostra subito le tue segnalazioni, con la nuova.
+              setState(() {
+                _invii++;
+                _mappaMie = true;
+              });
+              _vaiA(pMappa);
+            },
+          ),
+        pMappa => SchermataSegnalazioni(key: ValueKey('mappa-$_invii'), s: s, soloMie: _mappaMie),
+        pAria => SchermataAmbiente(stato: _ambiente, s: s, incorporata: true),
+        _ => SchermataAssistente(s: s, incorporata: true, onFonte: (ctx, fonte) => _apriFonte(ctx, fonte, s)),
+      };
+
+  /// Le cinque schede: quelle mai aperte sono segnaposto vuoti; quelle nascoste
+  /// hanno le animazioni ferme (TickerMode) e un proprio livello di disegno.
+  List<Widget> _schede(Copie s) {
+    final firma = (widget.inglese, _invii, _mappaMie);
+    if (firma != _firmaPagine) {
+      _firmaPagine = firma;
+      _pagineCostruite.fillRange(0, _pagineCostruite.length, null);
+    }
+    return [
+      for (var i = 0; i < _pagineCostruite.length; i++)
+        if (!_visitate.contains(i))
+          const SizedBox.shrink()
+        else
+          TickerMode(
+            enabled: i == _pagina,
+            child: RepaintBoundary(child: _pagineCostruite[i] ??= _costruisciPagina(i, s)),
+          ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = Copie(widget.inglese);
     final accento = _accenti[_pagina];
-    final pagine = [
-      SchermataInizio(
-        key: ValueKey('inizio-$_invii'),
-        s: s,
-        ambiente: _ambiente,
-        onSegnalazioni: () => _vaiA(pSegnala),
-        onMappa: () => _vaiA(pMappa),
-        onAria: () => _vaiA(pAria),
-        onIdee: () => _apriIdee(s),
-        onAvvisi: () => _apriAvvisi(s),
-        onMie: () => _apriPagina(context, null, SchermataSegnalazioni(s: s, soloMie: true)),
-      ),
-      SchermataSegnalazione(
-        s: s,
-        onInviata: () {
-          // La mappa si ricarica e mostra subito le tue segnalazioni, con la nuova.
-          setState(() {
-            _invii++;
-            _mappaMie = true;
-          });
-          _vaiA(pMappa);
-        },
-      ),
-      SchermataSegnalazioni(key: ValueKey('mappa-$_invii'), s: s, soloMie: _mappaMie),
-      SchermataAmbiente(stato: _ambiente, s: s, incorporata: true),
-      SchermataAssistente(s: s, incorporata: true, onFonte: (ctx, fonte) => _apriFonte(ctx, fonte, s)),
-    ];
-    final curva = CurvedAnimation(parent: _transizione, curve: Curves.easeOutCubic);
+    final pagine = _schede(s);
+    final curva = _curvaTransizione;
 
     return Scaffold(
       appBar: AppBar(
@@ -619,7 +662,7 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
         child: FadeTransition(
           opacity: curva,
           child: SlideTransition(
-            position: Tween<Offset>(begin: const Offset(0, .015), end: Offset.zero).animate(curva),
+            position: Tween<Offset>(begin: Offset(.025 * _direzione, 0), end: Offset.zero).animate(curva),
             child: IndexedStack(index: _pagina, children: pagine),
           ),
         ),
@@ -870,7 +913,10 @@ class _ScorciatoiaHome extends StatelessWidget {
       label: etichetta,
       onTap: onTap,
       excludeSemantics: true,
-      child: Material(
+      child: Premibile(
+        attivo: onTap != null,
+        scala: .95,
+        child: Material(
         color: piena ? accento.base : accento.tinta,
         shape: RoundedRectangleBorder(
           borderRadius: raggio,
@@ -905,6 +951,7 @@ class _ScorciatoiaHome extends StatelessWidget {
               ),
             ),
           ),
+        ),
         ),
       ),
     );
@@ -2261,7 +2308,7 @@ class _SchermataIdeeState extends State<SchermataIdee> {
           dettaglio: '${_idee.length} ${s.t('idee', 'ideas')}',
           accento: Accento.giallo,
         ),
-        AnimatedSwitcher(duration: durata(context, 250), child: _elencoIdee(s)),
+        CambioMorbido(child: _elencoIdee(s)),
       ])),
     );
   }
@@ -2638,7 +2685,7 @@ class _SchermataAvvisiState extends State<SchermataAvvisi> {
                 dettaglio: '${elenco.length} ${s.t('elementi', 'items')}',
                 accento: Accento.viola,
               ),
-            AnimatedSwitcher(duration: durata(context, 250), child: contenuto),
+            CambioMorbido(child: contenuto),
           ],
         ),
       ),

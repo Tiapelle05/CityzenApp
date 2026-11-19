@@ -512,7 +512,16 @@ class _SchermataGraficoState extends State<SchermataGrafico> {
                   },
                 ),
                 const SizedBox(height: 16),
-                Scheda(padding: const EdgeInsets.fromLTRB(8, 18, 16, 10), child: _grafico(m, colore)),
+                Scheda(
+                  padding: const EdgeInsets.fromLTRB(8, 18, 16, 10),
+                  // Caricamento, errore e grafico si danno il cambio in dissolvenza.
+                  child: CambioMorbido(
+                    child: KeyedSubtree(
+                      key: ValueKey(_caricamento ? 'caricamento' : _errore != null ? 'errore' : 'serie-$_intervallo'),
+                      child: _grafico(m, colore),
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 12),
                 if (_serie case final serie? when !_caricamento && _errore == null) _riepilogo(serie, m),
                 const SizedBox(height: 12),

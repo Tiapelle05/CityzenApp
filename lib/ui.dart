@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
+import 'package:flutter/gestures.dart' show kTouchSlop;
 import 'package:flutter/material.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -91,6 +92,9 @@ ThemeData temaTryees() {
     pageTransitionsTheme: const PageTransitionsTheme(builders: {
       TargetPlatform.android: FadeForwardsPageTransitionsBuilder(),
       TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+      TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+      TargetPlatform.windows: FadeForwardsPageTransitionsBuilder(),
+      TargetPlatform.linux: FadeForwardsPageTransitionsBuilder(),
     }),
     appBarTheme: const AppBarTheme(
       backgroundColor: sfondo,
@@ -216,24 +220,154 @@ class ContenitorePagina extends StatelessWidget {
 }
 
 /// Fa comparire il contenuto con dissolvenza e un breve scivolamento verso l'alto.
-/// [indice] ritarda leggermente gli elementi successivi per un effetto a cascata.
-class Appare extends StatelessWidget {
+/// [indice] ritarda gli elementi successivi per un effetto a cascata: ognuno
+/// parte poco dopo il precedente e dura quanto gli altri.
+///
+/// Usa [FadeTransition] e [SlideTransition]: a ogni fotogramma cambiano solo
+/// i parametri di disegno, senza ricostruire il contenuto.
+class Appare extends StatefulWidget {
   final Widget child;
   final int indice;
-  const Appare({super.key, required this.child, this.indice = 0});
+  /// Falso per mostrare subito il contenuto (per esempio un messaggio già
+  /// comparso che torna visibile scorrendo l'elenco).
+  final bool attiva;
+  const Appare({super.key, required this.child, this.indice = 0, this.attiva = true});
+
+  /// Durata della comparsa di un singolo elemento e ritardo tra uno e l'altro.
+  static const int durataMs = 360, passoMs = 55;
+
+  @override
+  State<Appare> createState() => _AppareState();
+}
+
+class _AppareState extends State<Appare> with SingleTickerProviderStateMixin {
+  late final int _ritardo = widget.indice.clamp(0, 6) * Appare.passoMs;
+  late final AnimationController _anim = AnimationController(
+    vsync: this,
+    duration: Duration(milliseconds: Appare.durataMs + _ritardo),
+  );
+  late final Animation<double> _curva = _anim.drive(
+    CurveTween(curve: Interval(_ritardo / (Appare.durataMs + _ritardo), 1, curve: Curves.easeOutCubic)),
+  );
+  late final Animation<Offset> _scivola =
+      Tween<Offset>(begin: const Offset(0, .04), end: Offset.zero).animate(_curva);
+  bool _avviata = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_avviata) return;
+    _avviata = true;
+    if (!widget.attiva || MediaQuery.of(context).disableAnimations) {
+      _anim.value = 1;
+    } else {
+      _anim.forward();
+    }
+  }
+
+  @override
+  void dispose() {
+    _anim.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => FadeTransition(
+        opacity: _curva,
+        child: SlideTransition(position: _scivola, child: widget.child),
+      );
+}
+
+/// Curve da dare all'[AnimatedSwitcher] che usa [transizioneMorbida].
+const Curve curvaEntrata = Curves.easeOutCubic, curvaUscita = Curves.easeInCubic;
+
+/// Transizione per [AnimatedSwitcher]: dissolvenza con un leggero
+/// scivolamento verso l'alto, come [Appare]. Le curve vanno impostate sullo
+/// switcher ([curvaEntrata], [curvaUscita]): qui non si crea nessuna
+/// CurvedAnimation, perché lo switcher richiama questa funzione a ogni
+/// aggiornamento del figlio e ognuna resterebbe in ascolto del controller.
+Widget transizioneMorbida(Widget figlio, Animation<double> animazione) => FadeTransition(
+      opacity: animazione,
+      child: SlideTransition(
+        position: Tween<Offset>(begin: const Offset(0, .02), end: Offset.zero).animate(animazione),
+        child: figlio,
+      ),
+    );
+
+/// Disposizione per [AnimatedSwitcher] allineata in alto: il contenuto
+/// uscente non salta al centro quando ha un'altezza diversa dal nuovo.
+Widget disposizioneInAlto(Widget? attuale, List<Widget> precedenti) => Stack(
+      alignment: Alignment.topCenter,
+      children: [...precedenti, ?attuale],
+    );
+
+/// [AnimatedSwitcher] con la dissolvenza dell'app e altezza che si adatta
+/// con morbidezza al nuovo contenuto.
+class CambioMorbido extends StatelessWidget {
+  final Widget child;
+  final int ms;
+  const CambioMorbido({super.key, required this.child, this.ms = 260});
 
   @override
   Widget build(BuildContext context) {
-    final ms = 380 + (indice.clamp(0, 6) * 70);
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
-      duration: durata(context, ms),
+    final d = durata(context, ms);
+    return AnimatedSize(
+      duration: d,
       curve: Curves.easeOutCubic,
-      builder: (context, v, figlio) => Opacity(
-        opacity: v,
-        child: Transform.translate(offset: Offset(0, 14 * (1 - v)), child: figlio),
+      alignment: Alignment.topCenter,
+      child: AnimatedSwitcher(
+        duration: d,
+        switchInCurve: curvaEntrata,
+        switchOutCurve: curvaUscita,
+        transitionBuilder: transizioneMorbida,
+        layoutBuilder: disposizioneInAlto,
+        child: child,
       ),
-      child: child,
+    );
+  }
+}
+
+/// Rimpicciolisce leggermente il contenuto mentre lo si preme, per un
+/// riscontro immediato al tocco (oltre all'increspatura del Material).
+/// Non intercetta i gesti: il tocco arriva comunque al figlio.
+class Premibile extends StatefulWidget {
+  final Widget child;
+  final bool attivo;
+  final double scala;
+  const Premibile({super.key, required this.child, this.attivo = true, this.scala = .97});
+
+  @override
+  State<Premibile> createState() => _PremibileState();
+}
+
+class _PremibileState extends State<Premibile> {
+  bool _premuto = false;
+  Offset _inizio = Offset.zero;
+
+  void _imposta(bool v) {
+    if (_premuto != v && mounted) setState(() => _premuto = v);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.attivo) return widget.child;
+    return Listener(
+      onPointerDown: (e) {
+        _inizio = e.position;
+        _imposta(true);
+      },
+      // Se il dito scorre la pagina non è più un tocco: la scheda torna subito com'era.
+      onPointerMove: (e) {
+        if (_premuto && (e.position - _inizio).distance > kTouchSlop) _imposta(false);
+      },
+      onPointerUp: (_) => _imposta(false),
+      onPointerCancel: (_) => _imposta(false),
+      child: AnimatedScale(
+        scale: _premuto ? widget.scala : 1,
+        duration: durata(context, _premuto ? 90 : 160),
+        curve: Curves.easeOutCubic,
+        child: widget.child,
+      ),
     );
   }
 }
@@ -374,7 +508,7 @@ class Scheda extends StatelessWidget {
     final alta = MediaQuery.highContrastOf(context);
     final raggio = BorderRadius.circular(22);
     final contenuto = Padding(padding: padding, child: child);
-    return Container(
+    final scheda = Container(
       width: double.infinity,
       decoration: BoxDecoration(
         borderRadius: raggio,
@@ -395,6 +529,7 @@ class Scheda extends StatelessWidget {
         child: onTap == null ? contenuto : InkWell(onTap: onTap, child: contenuto),
       ),
     );
+    return onTap == null ? scheda : Premibile(scala: .985, child: scheda);
   }
 }
 
@@ -533,6 +668,8 @@ class _CaricamentoScheletroState extends State<CaricamentoScheletro> with Single
     vsync: this,
     duration: const Duration(milliseconds: 900),
   );
+  late final Animation<double> _opacita =
+      Tween<double>(begin: .45, end: 1).chain(CurveTween(curve: Curves.easeInOut)).animate(_pulsazione);
 
   @override
   void didChangeDependencies() {
@@ -564,7 +701,7 @@ class _CaricamentoScheletroState extends State<CaricamentoScheletro> with Single
         label: widget.etichetta,
         child: ExcludeSemantics(
           child: FadeTransition(
-            opacity: Tween<double>(begin: .45, end: 1).animate(_pulsazione),
+            opacity: _opacita,
             child: Column(
               children: List.generate(
                 widget.numero,

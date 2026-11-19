@@ -28,6 +28,9 @@ class _Messaggio {
   /// Vero se l'errore consente di riprovare.
   bool riprovabile;
 
+  /// Vero dopo l'animazione di comparsa: scorrendo l'elenco non si ripete.
+  bool mostrato = false;
+
   _Messaggio(this.ruolo, this.testo, {this.fonti = const []}) : riprovabile = false;
 
   bool get utente => ruolo == ChatTurn.utente;
@@ -65,12 +68,6 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
     ('A che punto è la mia segnalazione?', 'What is the status of my report?'),
     ('Che temperatura massima c’è stata ieri?', 'What was the highest temperature yesterday?'),
   ];
-
-  @override
-  void initState() {
-    super.initState();
-    _campo.addListener(() => setState(() {}));
-  }
 
   @override
   void dispose() {
@@ -161,12 +158,15 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
 
   void _scorriInFondo() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_scroll.hasClients) return;
-      final fine = _scroll.position.maxScrollExtent;
+      if (!mounted || !_scroll.hasClients) return;
+      // Durante la dissolvenza tra due conversazioni gli elenchi agganciati
+      // possono essere due: si scorre l'ultimo, quello che sta entrando.
+      final posizione = _scroll.positions.last;
+      final fine = posizione.maxScrollExtent;
       if (MediaQuery.of(context).disableAnimations) {
-        _scroll.jumpTo(fine);
+        posizione.jumpTo(fine);
       } else {
-        _scroll.animateTo(fine, duration: const Duration(milliseconds: 280), curve: Curves.easeOutCubic);
+        posizione.animateTo(fine, duration: const Duration(milliseconds: 280), curve: Curves.easeOutCubic);
       }
     });
   }
@@ -189,7 +189,17 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
         child: Column(
           children: [
             if (widget.incorporata) _intestazione(),
-            Expanded(child: _messaggi.isEmpty ? _vuota() : _conversazione()),
+            Expanded(
+              child: AnimatedSwitcher(
+                duration: durata(context, 260),
+                switchInCurve: curvaEntrata,
+                switchOutCurve: curvaUscita,
+                transitionBuilder: transizioneMorbida,
+                child: _messaggi.isEmpty
+                    ? KeyedSubtree(key: const ValueKey('vuota'), child: _vuota())
+                    : KeyedSubtree(key: const ValueKey('conversazione'), child: _conversazione()),
+              ),
+            ),
             _barraInvio(),
           ],
         ),
@@ -317,14 +327,25 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
   }
 
   Widget _conversazione() {
+    // Copia dei messaggi: dopo «nuova conversazione» l'elenco che sta svanendo
+    // non deve leggere la lista ormai vuota (errore di indice se si ridisegna).
+    final messaggi = List.of(_messaggi);
+    final inAttesa = _inAttesa;
     return ListView.builder(
       controller: _scroll,
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-      itemCount: _messaggi.length + (_inAttesa ? 1 : 0),
+      itemCount: messaggi.length + (inAttesa ? 1 : 0),
       itemBuilder: (context, i) {
-        if (i == _messaggi.length) return _staScrivendo();
-        final m = _messaggi[i];
-        return m.utente ? _bollaUtente(m) : _bollaAssistente(m);
+        if (i == messaggi.length) return Appare(key: const ValueKey('scrive'), child: _staScrivendo());
+        final m = messaggi[i];
+        // Ogni messaggio compare una volta sola, con una breve dissolvenza.
+        final nuovo = !m.mostrato;
+        m.mostrato = true;
+        return Appare(
+          key: ObjectKey(m),
+          attiva: nuovo,
+          child: m.utente ? _bollaUtente(m) : _bollaAssistente(m),
+        );
       },
     );
   }
@@ -472,7 +493,7 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+                  const _PuntiniScrittura(),
                   const SizedBox(width: 10),
                   Text(
                     s.t('sta scrivendo…', 'typing…'),
@@ -487,10 +508,13 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
     );
   }
 
+  bool get _puoInviare {
+    final testo = _campo.text.trim();
+    return !_inAttesa && testo.isNotEmpty && testo.length <= LimitiAssistente.lunghezzaDomanda;
+  }
+
   Widget _barraInvio() {
     final s = widget.s;
-    final testo = _campo.text.trim();
-    final puoInviare = !_inAttesa && testo.isNotEmpty && testo.length <= LimitiAssistente.lunghezzaDomanda;
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
       decoration: const BoxDecoration(
@@ -513,7 +537,8 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
                   maxLengthEnforcement: MaxLengthEnforcement.enforced,
                   textInputAction: TextInputAction.send,
                   textCapitalization: TextCapitalization.sentences,
-                  onSubmitted: puoInviare ? (_) => _invia() : null,
+                  // _invia controlla da sé che la domanda sia valida.
+                  onSubmitted: (_) => _invia(),
                   decoration: InputDecoration(hintText: s.t('Scrivi una domanda…', 'Ask a question…')),
                   // Il contatore compare solo vicino al limite.
                   buildCounter: (_, {required currentLength, required isFocused, maxLength}) =>
@@ -523,17 +548,35 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
               const SizedBox(width: 8),
               Padding(
                 padding: const EdgeInsets.only(bottom: 2),
-                child: IconButton.filled(
-                  tooltip: s.t('Invia', 'Send'),
-                  style: IconButton.styleFrom(minimumSize: const Size(52, 52), backgroundColor: foresta),
-                  onPressed: puoInviare ? _invia : null,
-                  icon: _inAttesa
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                        )
-                      : const Icon(Icons.send_rounded),
+                // Solo il pulsante ascolta il campo: scrivendo non si ricostruisce
+                // tutta la conversazione a ogni lettera.
+                child: ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: _campo,
+                  builder: (context, _, _) {
+                    final attivo = _puoInviare;
+                    return AnimatedScale(
+                      scale: attivo || _inAttesa ? 1 : .9,
+                      duration: durata(context, 160),
+                      curve: Curves.easeOutBack,
+                      child: IconButton.filled(
+                        tooltip: s.t('Invia', 'Send'),
+                        style: IconButton.styleFrom(minimumSize: const Size(52, 52), backgroundColor: foresta),
+                        onPressed: attivo ? _invia : null,
+                        icon: AnimatedSwitcher(
+                          duration: durata(context, 180),
+                          transitionBuilder: (figlio, a) => ScaleTransition(scale: a, child: figlio),
+                          child: _inAttesa
+                              ? const SizedBox(
+                                  key: ValueKey('attesa'),
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                )
+                              : const Icon(Icons.send_rounded, key: ValueKey('invia')),
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ),
             ],
@@ -564,4 +607,73 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
     TipiFonte.categorie => s.t('Segnala', 'Report'),
     _ => null,
   };
+}
+
+/// Tre puntini che si alzano a turno mentre l'assistente prepara la risposta.
+/// Con le animazioni disattivate restano fermi.
+class _PuntiniScrittura extends StatefulWidget {
+  const _PuntiniScrittura();
+
+  @override
+  State<_PuntiniScrittura> createState() => _PuntiniScritturaState();
+}
+
+class _PuntiniScritturaState extends State<_PuntiniScrittura> with SingleTickerProviderStateMixin {
+  late final AnimationController _anim = AnimationController(vsync: this, duration: const Duration(milliseconds: 1100));
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.of(context).disableAnimations) {
+      _anim.stop();
+    } else if (!_anim.isAnimating) {
+      _anim.repeat();
+    }
+  }
+
+  @override
+  void dispose() {
+    _anim.dispose();
+    super.dispose();
+  }
+
+  /// Ogni puntino si alza in un terzo diverso del ciclo e poi riscende.
+  /// Create una volta sola: una ricostruzione (per esempio quando si apre la
+  /// tastiera) non aggiunge altri ascoltatori al controller.
+  late final List<Animation<double>> _salite = [
+    for (var i = 0; i < 3; i++)
+      _anim.drive(CurveTween(curve: Interval(i * .18, i * .18 + .45, curve: const _AndataRitorno(Curves.easeInOut)))),
+  ];
+
+  Widget _puntino(int i) {
+    final salita = _salite[i];
+    return AnimatedBuilder(
+      animation: salita,
+      builder: (context, figlio) => Transform.translate(
+        offset: Offset(0, -4 * salita.value),
+        child: Opacity(opacity: .45 + .55 * salita.value, child: figlio),
+      ),
+      child: Container(
+        width: 7,
+        height: 7,
+        margin: const EdgeInsets.symmetric(horizontal: 2),
+        decoration: const BoxDecoration(color: foresta, shape: BoxShape.circle),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        height: 14,
+        child: Row(mainAxisSize: MainAxisSize.min, children: [for (var i = 0; i < 3; i++) _puntino(i)]),
+      );
+}
+
+/// Sale da 0 a 1 nella prima metà dell'intervallo e torna a 0 nella seconda.
+class _AndataRitorno extends Curve {
+  final Curve curva;
+  const _AndataRitorno(this.curva);
+
+  @override
+  double transformInternal(double t) => curva.transform(t < .5 ? t * 2 : (1 - t) * 2);
 }

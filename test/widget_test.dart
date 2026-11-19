@@ -4,6 +4,7 @@ import 'package:flutter_application_1/assistente/schermata_assistente.dart';
 import 'package:flutter_application_1/citizen_api.dart';
 import 'package:flutter_application_1/main.dart';
 import 'package:flutter_application_1/mappa_parco.dart';
+import 'package:flutter_application_1/schermata_segnalazioni.dart';
 
 void main() {
   testWidgets('Tryees carica le cinque sezioni principali', (tester) async {
@@ -28,6 +29,9 @@ void main() {
     expect(find.text('Ecco il parco in questo momento'), findsOneWidget);
     expect(find.text('Stato del parco'), findsNothing);
     expect(find.byType(AnteprimaMappa), findsOneWidget);
+    // Le schede mai aperte non si costruiscono: all'avvio c'è solo la Home.
+    expect(find.byType(SchermataSegnalazioni, skipOffstage: false), findsNothing);
+    expect(find.byType(SchermataAssistente, skipOffstage: false), findsNothing);
 
     await tester.tap(find.byTooltip('Cambia lingua'));
     await tester.pumpAndSettle();
@@ -46,5 +50,9 @@ void main() {
     await tester.tap(find.text(nomeAssistente).first);
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.text('Hi, I’m $nomeAssistente'), findsOneWidget);
+    // Tornando alla Home la chat resta costruita (la conversazione non si perde).
+    await tester.tap(find.text('Home'));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byType(SchermataAssistente, skipOffstage: false), findsOneWidget);
   });
 }

@@ -770,10 +770,9 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
             color: sfondo,
             clipBehavior: Clip.antiAlias,
             shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(26))),
-            child: ListView(
-              controller: scroll,
-              padding: const EdgeInsets.fromLTRB(14, 0, 14, 28),
-              children: [
+            child: _elencoPigro(
+              scroll,
+              [
                 Center(
                   child: Container(
                     margin: const EdgeInsets.only(top: 10, bottom: 8),
@@ -829,6 +828,15 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
       ),
     );
   }
+
+  /// Elenco del pannello costruito solo per le voci visibili: con molte
+  /// segnalazioni non si impaginano schede che restano sotto il bordo.
+  Widget _elencoPigro(ScrollController scroll, List<Widget> voci) => ListView.builder(
+        controller: scroll,
+        padding: const EdgeInsets.fromLTRB(14, 0, 14, 28),
+        itemCount: voci.length,
+        itemBuilder: (_, i) => voci[i],
+      );
 
   @override
   Widget build(BuildContext context) {

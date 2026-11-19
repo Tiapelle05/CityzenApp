@@ -58,7 +58,9 @@ class MappaParco extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final mappa = FlutterMap(
+    // Livello di disegno a sé: trascinare il pannello o animare ciò che sta
+    // sopra la mappa non ridisegna le tile.
+    final mappa = RepaintBoundary(child: FlutterMap(
       mapController: controller,
       options: MapOptions(
         initialCenter: centro,
@@ -81,7 +83,7 @@ class MappaParco extends StatelessWidget {
         ...livelli,
         Padding(padding: margineAttribuzione, child: _Attribuzione(allineamentoAttribuzione)),
       ],
-    );
+    ));
     if (altezza == null) return ColoredBox(color: menta, child: mappa);
     return Container(
       height: altezza,
