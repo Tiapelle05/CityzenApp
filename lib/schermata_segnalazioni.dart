@@ -610,60 +610,58 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
     );
   }
 
-  /// Filtro per stato: il puntino colorato è anche la legenda dei segnaposto.
-  Widget _chipStato(String stato, String etichetta, int quanti) {
-    final attivo = _filtroStato == stato;
-    final colore = coloreStatoSegnalazione(stato);
-    return Semantics(
-      button: true,
-      selected: attivo,
-      label: '$etichetta, $quanti',
-      excludeSemantics: true,
+  /// Filtro per stato in un solo menu: le voci hanno il puntino colorato
+  /// (la legenda dei segnaposto) e quante segnalazioni ci sono.
+  Widget _menuStato(Copie s, Map<String, int> conteggi) {
+    final scelto = _filtroStato;
+    final etichetta = scelto == null
+        ? s.t('Tutti gli stati', 'All statuses')
+        : _stati.where((x) => x.$1 == scelto).map((x) => s.t(x.$2, x.$3)).first;
+    Widget puntino(Color c) => Container(width: 10, height: 10, decoration: BoxDecoration(color: c, shape: BoxShape.circle));
+    return PopupMenuButton<String>(
+      tooltip: s.t('Filtra per stato', 'Filter by status'),
+      onSelected: (v) => setState(() {
+        _filtroStato = v.isEmpty ? null : v;
+        if (_selezionata != null && !_visibili.any((r) => r['id'] == _selezionata)) _selezionata = null;
+      }),
+      itemBuilder: (_) => [
+        CheckedPopupMenuItem(
+          value: '',
+          checked: scelto == null,
+          child: Text('${s.t('Tutti gli stati', 'All statuses')} (${_items.length})'),
+        ),
+        for (final (stato, it, en) in _stati)
+          CheckedPopupMenuItem(
+            value: stato,
+            checked: scelto == stato,
+            child: Row(
+              children: [
+                puntino(coloreStatoSegnalazione(stato)),
+                const SizedBox(width: 8),
+                Text('${s.t(it, en)} (${conteggi[stato] ?? 0})'),
+              ],
+            ),
+          ),
+      ],
       child: Material(
-        color: attivo ? colore : superficie,
+        color: scelto == null ? superficie : coloreStatoSegnalazione(scelto),
         shape: const StadiumBorder(),
         shadowColor: const Color(0x4012261B),
         elevation: 3,
-        child: InkWell(
-          customBorder: const StadiumBorder(),
-          onTap: () => setState(() {
-            _filtroStato = attivo ? null : stato;
-            if (_selezionata != null && !_visibili.any((r) => r['id'] == _selezionata)) _selezionata = null;
-          }),
-          child: Container(
-            height: 42,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 10,
-                  height: 10,
-                  decoration: BoxDecoration(
-                    color: attivo ? Colors.white : colore,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  etichetta,
-                  style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800, color: attivo ? Colors.white : testo),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  '$quanti',
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w900,
-                    color: attivo ? Colors.white.withValues(alpha: .85) : testoTenue,
-                  ),
-                ),
-                if (attivo) ...[
-                  const SizedBox(width: 4),
-                  const Icon(Icons.close_rounded, size: 15, color: Colors.white),
-                ],
-              ],
-            ),
+        child: Container(
+          height: 42,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (scelto != null) ...[puntino(Colors.white), const SizedBox(width: 6)],
+              Text(
+                etichetta,
+                style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800, color: scelto == null ? testo : Colors.white),
+              ),
+              const SizedBox(width: 2),
+              Icon(Icons.expand_more_rounded, size: 18, color: scelto == null ? testoSecondario : Colors.white),
+            ],
           ),
         ),
       ),
@@ -684,10 +682,7 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
         children: [
           Center(child: _interruttoreChi(s)),
           const SizedBox(width: 8),
-          for (final (stato, it, en) in _stati) ...[
-            Center(child: _chipStato(stato, s.t(it, en), conteggi[stato] ?? 0)),
-            const SizedBox(width: 6),
-          ],
+          Center(child: _menuStato(s, conteggi)),
         ],
       ),
     );

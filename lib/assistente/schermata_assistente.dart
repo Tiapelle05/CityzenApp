@@ -189,7 +189,6 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
         child: Column(
           children: [
             if (widget.incorporata) _intestazione(),
-            _avvertenze(),
             Expanded(child: _messaggi.isEmpty ? _vuota() : _conversazione()),
             _barraInvio(),
           ],
@@ -207,10 +206,10 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
   }
 
   Widget _pulsanteNuova(Copie s) => IconButton(
-        tooltip: s.t('Nuova conversazione', 'New conversation'),
-        onPressed: _inAttesa ? null : _nuovaConversazione,
-        icon: const Icon(Icons.add_comment_outlined),
-      );
+    tooltip: s.t('Nuova conversazione', 'New conversation'),
+    onPressed: _inAttesa ? null : _nuovaConversazione,
+    icon: const Icon(Icons.add_comment_outlined),
+  );
 
   /// Intestazione della scheda: chi è l'assistente e, a conversazione iniziata,
   /// il pulsante per ricominciare.
@@ -233,7 +232,13 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
                 children: [
                   const Text(
                     nomeAssistente,
-                    style: TextStyle(fontSize: 21, height: 1.15, fontWeight: FontWeight.w800, color: testo, letterSpacing: -.3),
+                    style: TextStyle(
+                      fontSize: 21,
+                      height: 1.15,
+                      fontWeight: FontWeight.w800,
+                      color: testo,
+                      letterSpacing: -.3,
+                    ),
                   ),
                   Text(
                     s.t('L’assistente del parco', 'Your park assistant'),
@@ -252,50 +257,20 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
     );
   }
 
+  /// Avvertenze in piccolo sotto il campo: prima occupavano mezzo schermo in alto.
   Widget _avvertenze() {
     final s = widget.s;
-    final disclaimer =
-        _disclaimer ??
-        s.t(
-          disclaimerPredefinito,
-          'Answers are generated automatically from the app’s data. Values estimated by low-cost, non-certified sensors.',
-        );
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: cieloChiaro,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: cielo.withValues(alpha: .25)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Icon(Icons.info_outline_rounded, size: 18, color: cieloScuro),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(disclaimer, style: const TextStyle(fontSize: 12.5, height: 1.35, color: testo)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              const Icon(Icons.privacy_tip_outlined, size: 18, color: cieloScuro),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  s.t('Non scrivere dati personali nelle domande.', 'Do not write personal data in your questions.'),
-                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: cieloScuro),
-                ),
-              ),
-            ],
-          ),
-        ],
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 2, 4, 0),
+      child: Text(
+        _disclaimer == null
+            ? s.t(
+                'Risposte automatiche dai dati dell’app. Non scrivere dati personali.',
+                'Automatic answers from the app’s data. Do not write personal data.',
+              )
+            : '$_disclaimer ${s.t('Non scrivere dati personali.', 'Do not write personal data.')}',
+        textAlign: TextAlign.center,
+        style: const TextStyle(fontSize: 11.5, height: 1.3, color: testoSecondario),
       ),
     );
   }
@@ -522,43 +497,48 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
         color: superficie,
         border: Border(top: BorderSide(color: bordo)),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Expanded(
-            child: TextField(
-              controller: _campo,
-              focusNode: _focus,
-              minLines: 1,
-              maxLines: 4,
-              maxLength: LimitiAssistente.lunghezzaDomanda,
-              maxLengthEnforcement: MaxLengthEnforcement.enforced,
-              textInputAction: TextInputAction.send,
-              textCapitalization: TextCapitalization.sentences,
-              onSubmitted: puoInviare ? (_) => _invia() : null,
-              decoration: InputDecoration(
-                hintText: s.t('Scrivi a $nomeAssistente…', 'Message $nomeAssistente…'),
-                labelText: s.t('Domanda', 'Question'),
-                floatingLabelBehavior: FloatingLabelBehavior.never,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _campo,
+                  focusNode: _focus,
+                  minLines: 1,
+                  maxLines: 4,
+                  maxLength: LimitiAssistente.lunghezzaDomanda,
+                  maxLengthEnforcement: MaxLengthEnforcement.enforced,
+                  textInputAction: TextInputAction.send,
+                  textCapitalization: TextCapitalization.sentences,
+                  onSubmitted: puoInviare ? (_) => _invia() : null,
+                  decoration: InputDecoration(hintText: s.t('Scrivi una domanda…', 'Ask a question…')),
+                  // Il contatore compare solo vicino al limite.
+                  buildCounter: (_, {required currentLength, required isFocused, maxLength}) =>
+                      maxLength != null && currentLength > maxLength - 100 ? Text('$currentLength/$maxLength') : null,
+                ),
               ),
-            ),
+              const SizedBox(width: 8),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                child: IconButton.filled(
+                  tooltip: s.t('Invia', 'Send'),
+                  style: IconButton.styleFrom(minimumSize: const Size(52, 52), backgroundColor: foresta),
+                  onPressed: puoInviare ? _invia : null,
+                  icon: _inAttesa
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Icon(Icons.send_rounded),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
-          Padding(
-            padding: const EdgeInsets.only(bottom: 22),
-            child: IconButton.filled(
-              tooltip: s.t('Invia', 'Send'),
-              style: IconButton.styleFrom(minimumSize: const Size(52, 52), backgroundColor: foresta),
-              onPressed: puoInviare ? _invia : null,
-              icon: _inAttesa
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                    )
-                  : const Icon(Icons.send_rounded),
-            ),
-          ),
+          _avvertenze(),
         ],
       ),
     );

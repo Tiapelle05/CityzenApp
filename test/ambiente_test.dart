@@ -216,7 +216,7 @@ void main() {
 
     testWidgets('chat: domanda suggerita, risposta e fonti', (tester) async {
       await tester.pumpWidget(MaterialApp(theme: temaTryees(), home: const SchermataAssistente(s: it)));
-      expect(find.text('Non scrivere dati personali nelle domande.'), findsOneWidget);
+      expect(find.textContaining('Non scrivere dati personali.'), findsOneWidget);
       await tester.tap(find.text('Com’è l’aria adesso?'));
       await tester.pump();
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));

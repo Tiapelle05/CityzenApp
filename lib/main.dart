@@ -114,6 +114,9 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
   ];
 
   int _pagina = pInizio;
+
+  /// Dopo un invio la mappa si apre su «Mie».
+  bool _mappaMie = false;
   /// Cresce a ogni segnalazione inviata: la mappa si ricarica.
   int _invii = 0;
   /// Avvisi attivi (per il pallino sulla campanella) e se almeno uno è importante.
@@ -523,26 +526,6 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
     );
   }
 
-  /// Pulsante della mappa al centro della barra: sempre pieno e un po' più grande.
-  Widget _iconaMappa(bool selezionata) => AnimatedContainer(
-        duration: durata(context, 220),
-        curve: Curves.easeOutCubic,
-        width: 56,
-        height: 30,
-        decoration: BoxDecoration(
-          color: selezionata ? cieloScuro : cielo,
-          borderRadius: BorderRadius.circular(15),
-          boxShadow: [
-            BoxShadow(
-              color: cieloScuro.withValues(alpha: selezionata ? .40 : .22),
-              blurRadius: selezionata ? 14 : 8,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Icon(selezionata ? Icons.map_rounded : Icons.map_outlined, color: Colors.white, size: 24),
-      );
-
   @override
   Widget build(BuildContext context) {
     final s = Copie(widget.inglese);
@@ -557,17 +540,20 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
         onAria: () => _vaiA(pAria),
         onIdee: () => _apriIdee(s),
         onAvvisi: () => _apriAvvisi(s),
-        onChiedi: () => _vaiA(pAssistente),
+        onMie: () => _apriPagina(context, null, SchermataSegnalazioni(s: s, soloMie: true)),
       ),
       SchermataSegnalazione(
         s: s,
         onInviata: () {
-          // La mappa si ricarica e mostra subito la nuova segnalazione.
-          setState(() => _invii++);
+          // La mappa si ricarica e mostra subito le tue segnalazioni, con la nuova.
+          setState(() {
+            _invii++;
+            _mappaMie = true;
+          });
           _vaiA(pMappa);
         },
       ),
-      SchermataSegnalazioni(key: ValueKey('mappa-$_invii'), s: s),
+      SchermataSegnalazioni(key: ValueKey('mappa-$_invii'), s: s, soloMie: _mappaMie),
       SchermataAmbiente(stato: _ambiente, s: s, incorporata: true),
       SchermataAssistente(s: s, incorporata: true, onFonte: (ctx, fonte) => _apriFonte(ctx, fonte, s)),
     ];
@@ -645,10 +631,10 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
           boxShadow: [BoxShadow(color: Color(0x0F12261B), blurRadius: 20, offset: Offset(0, -4))],
         ),
         child: NavigationBarTheme(
-          // L'indicatore prende il colore della sezione aperta; la mappa ha già il suo pulsante pieno.
+          // L'indicatore prende il colore della sezione aperta: si accende una sola scheda alla volta.
           data: NavigationBarTheme.of(context).copyWith(
             height: 72,
-            indicatorColor: _pagina == pMappa ? Colors.transparent : accento.tinta,
+            indicatorColor: accento.tinta,
             labelTextStyle: WidgetStateProperty.resolveWith(
               (stati) => TextStyle(
                 fontSize: 12,
@@ -671,7 +657,7 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
               NavigationDestination(
                 icon: const Icon(Icons.home_outlined),
                 selectedIcon: const Icon(Icons.home_rounded),
-                label: s.t('Inizio', 'Home'),
+                label: s.t('Home', 'Home'),
               ),
               NavigationDestination(
                 icon: const Icon(Icons.add_location_alt_outlined),
@@ -679,8 +665,8 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
                 label: s.t('Segnala', 'Report'),
               ),
               NavigationDestination(
-                icon: _iconaMappa(false),
-                selectedIcon: _iconaMappa(true),
+                icon: const Icon(Icons.map_outlined),
+                selectedIcon: const Icon(Icons.map_rounded),
                 label: s.t('Mappa', 'Map'),
               ),
               NavigationDestination(
@@ -715,8 +701,8 @@ class SchermataInizio extends StatefulWidget {
   final VoidCallback? onAvvisi;
   /// Dati ambientali (card "Aria nel parco" e banner di allerta); senza, non compaiono.
   final StatoAmbiente? ambiente;
-  /// Apre la chat con l'assistente.
-  final VoidCallback? onChiedi;
+  /// Apre le segnalazioni del cittadino.
+  final VoidCallback? onMie;
 
   const SchermataInizio({
     super.key,
@@ -727,7 +713,7 @@ class SchermataInizio extends StatefulWidget {
     this.onIdee,
     this.onAvvisi,
     this.ambiente,
-    this.onChiedi,
+    this.onMie,
   });
 
   @override
@@ -761,20 +747,15 @@ class _SchermataInizioState extends State<SchermataInizio> {
   Widget build(BuildContext context) {
     final s = widget.s;
     final ambiente = widget.ambiente;
+    // Segnala e Parky sono già nella barra in basso: qui solo ciò che non c'è.
     final scorciatoie = [
-      _ScorciatoiaHome(
-        icona: Icons.add_location_alt_rounded,
-        etichetta: s.t('Segnala', 'Report'),
-        accento: Accento.arancio,
-        piena: true,
-        onTap: widget.onSegnalazioni,
-      ),
-      if (widget.onChiedi != null)
+      if (widget.onMie != null)
         _ScorciatoiaHome(
-          icona: Icons.forum_rounded,
-          etichetta: nomeAssistente,
-          accento: Accento.viola,
-          onTap: widget.onChiedi,
+          icona: Icons.receipt_long_rounded,
+          etichetta: s.t('Le mie segnalazioni', 'My reports'),
+          accento: Accento.arancio,
+          piena: true,
+          onTap: widget.onMie,
         ),
       _ScorciatoiaHome(
         icona: Icons.lightbulb_rounded,
@@ -912,6 +893,7 @@ class _ScorciatoiaHome extends StatelessWidget {
                     child: Text(
                       etichetta,
                       maxLines: 1,
+                      textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w800,

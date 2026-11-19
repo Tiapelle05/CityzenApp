@@ -15,12 +15,13 @@ void main() {
 
     expect(find.byType(MaterialApp), findsOneWidget);
     expect(find.byType(NavigationBar), findsOneWidget);
-    expect(find.text('Inizio'), findsOneWidget);
-    expect(find.text('Segnala'), findsNWidgets(2)); // barra e scorciatoia della Home
+    expect(find.text('Home'), findsOneWidget);
+    expect(find.text('Segnala'), findsOneWidget); // solo nella barra: niente doppioni in Home
+    expect(find.text('Le mie segnalazioni'), findsOneWidget);
     expect(find.text('Mappa'), findsOneWidget);
     expect(find.text('Aria'), findsOneWidget);
-    // Il nome dell'assistente compare nella barra e tra le scorciatoie della Home.
-    expect(find.text(nomeAssistente), findsNWidgets(2));
+    // Il nome dell'assistente compare solo nella barra.
+    expect(find.text(nomeAssistente), findsOneWidget);
     expect(find.text('Idee'), findsOneWidget);
     expect(find.text('Avvisi'), findsOneWidget);
     expect(find.byTooltip('Avvisi del parco'), findsOneWidget);

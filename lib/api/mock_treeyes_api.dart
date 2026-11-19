@@ -117,7 +117,7 @@ class MockTreeyesApi implements TreeyesApi {
       final r = mie.first;
       return _risposta(
         base,
-        'La tua segnalazione più recente (${r['code']}, ${r['category_label']}) è «${r['status_label']}».',
+        'La tua segnalazione più recente (${r['category_label']}) è «${r['status_label']}».',
         [AssistantSource(type: TipiFonte.miaSegnalazione, id: (r['id'] as num).toInt())],
       );
     }
