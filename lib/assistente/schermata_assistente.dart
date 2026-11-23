@@ -16,6 +16,52 @@ const String nomeAssistente = 'Parky';
 const String disclaimerPredefinito =
     'Risposte generate automaticamente dai dati dell’app. Valori stimati da sensori a basso costo, non certificati.';
 
+/// Testo di una risposta: le righe che cominciano con «• » (o «- », «* ») diventano
+/// punti elenco con il rientro giusto quando vanno a capo; una riga vuota separa i blocchi.
+/// Il testo resta selezionabile.
+class TestoRisposta extends StatelessWidget {
+  final String contenuto;
+  const TestoRisposta(this.contenuto, {super.key});
+
+  static const _stile = TextStyle(fontSize: 15, height: 1.4, color: testo);
+  static final _punto = RegExp(r'^\s*(?:[•\-*]|\d+[.)])\s+');
+
+  @override
+  Widget build(BuildContext context) {
+    final righe = contenuto.trim().split('\n');
+    final figli = <Widget>[];
+    for (final riga in righe) {
+      if (riga.trim().isEmpty) {
+        if (figli.isNotEmpty) figli.add(const SizedBox(height: 8));
+        continue;
+      }
+      final punto = _punto.firstMatch(riga);
+      if (punto == null) {
+        figli.add(Text(riga.trim(), style: _stile));
+        continue;
+      }
+      figli.add(
+        Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Padding(
+                padding: EdgeInsets.only(left: 2, right: 8),
+                child: Text('•', style: TextStyle(fontSize: 15, height: 1.4, color: foresta, fontWeight: FontWeight.w900)),
+              ),
+              Expanded(child: Text(riga.substring(punto.end).trim(), style: _stile)),
+            ],
+          ),
+        ),
+      );
+    }
+    return SelectionArea(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: figli),
+    );
+  }
+}
+
 /// Un messaggio della conversazione (solo in memoria).
 class _Messaggio {
   final String ruolo;
@@ -485,7 +531,7 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
                           bottomRight: Radius.circular(18),
                         ),
                       ),
-                      child: SelectableText(m.testo, style: const TextStyle(fontSize: 15, height: 1.4, color: testo)),
+                      child: TestoRisposta(m.testo),
                     ),
                     if (m.fonti.isNotEmpty) ...[
                       const SizedBox(height: 6),

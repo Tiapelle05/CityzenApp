@@ -96,8 +96,13 @@ class MockTreeyesApi implements TreeyesApi {
     if (['chi sei', 'come ti chiami', 'il tuo nome', 'cosa sai fare', 'cosa puoi fare', 'presentati'].any(q.contains)) {
       return _risposta(
         base,
-        'Sono Parky, l’assistente del parco. Posso dirti com’è l’aria, se ci sono avvisi, '
-        'a che punto sono le tue segnalazioni, quali idee sono state proposte e cosa puoi segnalare.',
+        _elenco('Sono Parky, l’assistente del parco. Posso dirti:', [
+          'com’è l’aria adesso',
+          'se ci sono avvisi',
+          'a che punto sono le tue segnalazioni',
+          'quali idee sono state proposte',
+          'cosa puoi segnalare',
+        ]),
         const [],
       );
     }
@@ -106,8 +111,11 @@ class MockTreeyesApi implements TreeyesApi {
       return _risposta(
         base,
         avvisi.isEmpty
-            ? 'Non ci sono avvisi attivi nel parco.'
-            : 'Ci sono ${avvisi.length} avvisi attivi: ${avvisi.map((a) => '«${a['title']}»').join(', ')}.',
+            ? 'Non ci sono avvisi in corso nel parco.'
+            : _elenco(
+                avvisi.length == 1 ? 'C’è un avviso in corso:' : 'Ci sono ${avvisi.length} avvisi in corso:',
+                [for (final a in avvisi) '${a['title']}: ${a['body']}'],
+              ),
         [
           for (final a in avvisi)
             AssistantSource(type: TipiFonte.avviso, id: (a['id'] as num).toInt(), title: a['title'] as String?),
@@ -121,11 +129,16 @@ class MockTreeyesApi implements TreeyesApi {
       if (idee.isEmpty) {
         return _risposta(base, 'Non ci sono ancora idee per il parco: puoi proporne una tu.', const []);
       }
-      final mie = idee.where((i) => i['is_mine'] == true).length;
       return _risposta(
         base,
-        'Ecco le idee proposte per il parco: ${idee.map((i) => '«${titoloSegnalazione(i)}» (${(i['status_label'] as String).toLowerCase()})').join(', ')}.'
-        '${mie == 0 ? '' : mie == 1 ? ' Una è tua.' : ' $mie sono tue.'}',
+        _elenco(
+          idee.length == 1 ? 'C’è un’idea proposta per il parco:' : 'Ci sono ${idee.length} idee proposte per il parco:',
+          [
+            for (final i in idee)
+              '${titoloSegnalazione(i)} – ${(i['status_label'] as String).toLowerCase()}'
+                  '${i['is_mine'] == true ? ' (tua)' : ''}',
+          ],
+        ),
         [
           for (final i in idee) AssistantSource(type: TipiFonte.idea, id: (i['id'] as num).toInt(), title: titoloSegnalazione(i)),
         ],
@@ -138,12 +151,12 @@ class MockTreeyesApi implements TreeyesApi {
           .take(3)
           .toList();
       if (mie.isEmpty) return _risposta(base, 'Non hai ancora inviato segnalazioni.', const []);
-      final r = mie.first;
-      final altre = mie.skip(1).map((r) => '${r['code']} è «${r['status_label']}»').join(', ');
       return _risposta(
         base,
-        'La tua segnalazione più recente (${r['code']}, ${r['category_label']}) è «${r['status_label']}».'
-        '${altre.isEmpty ? '' : ' Le altre: $altre.'}',
+        _elenco(
+          mie.length == 1 ? 'Hai una segnalazione:' : 'Ecco le tue segnalazioni più recenti:',
+          [for (final r in mie) '${titoloSegnalazione(r)} – ${(r['status_label'] as String).toLowerCase()}'],
+        ),
         [
           for (final r in mie)
             AssistantSource(type: TipiFonte.miaSegnalazione, id: (r['id'] as num).toInt(), title: titoloSegnalazione(r)),
@@ -154,13 +167,14 @@ class MockTreeyesApi implements TreeyesApi {
       final cat = await DatiSimulati.instance.categorie();
       return _risposta(
         base,
-        'Puoi segnalare: ${cat.map((c) => (c['label'] as String).toLowerCase()).join(', ')}.',
+        '${_elenco('Puoi segnalare problemi su:', [for (final c in cat) c['label'] as String])}\n\n'
+        'Per segnalare usa la scheda Segnala dell’app.',
         const [AssistantSource(type: TipiFonte.categorie)],
       );
     }
     if (q.contains('temperatura') || q.contains('ieri') || q.contains('caldo') || q.contains('freddo')) {
       final ieri = _ora().toUtc().subtract(const Duration(days: 1));
-      return _risposta(base, 'Nelle ultime 24 ore la temperatura è andata da 4,6 °C a 14,1 °C; ora è di circa 14 °C.', [
+      return _risposta(base, _elenco('Temperatura nelle ultime 24 ore:', ['adesso: circa 14 °C', 'minima: 4,6 °C', 'massima: 14,1 °C']), [
         AssistantSource(
           type: TipiFonte.ambiente,
           stationId: 1,
@@ -172,6 +186,10 @@ class MockTreeyesApi implements TreeyesApi {
     }
     return base;
   }
+
+  /// Come le risposte del backend: una frase breve e poi un punto per riga.
+  static String _elenco(String intro, List<String> voci) =>
+      [intro, for (final v in voci) '• ${v[0].toUpperCase()}${v.substring(1)}'].join('\n');
 
   AssistantReply _risposta(AssistantReply base, String testo, List<AssistantSource> fonti) =>
       AssistantReply(answer: testo, sources: fonti, mode: base.mode, model: base.model, disclaimer: base.disclaimer);
