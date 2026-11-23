@@ -320,12 +320,13 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
         ),
       ));
 
-  Future<void> _apriAvvisi(Copie s, [BuildContext? ctx]) async {
-    await _apriPagina(ctx ?? context, null, SchermataAvvisi(s: s));
+  Future<void> _apriAvvisi(Copie s, [BuildContext? ctx, int? evidenzia]) async {
+    await _apriPagina(ctx ?? context, null, SchermataAvvisi(s: s, evidenzia: evidenzia));
     unawaited(_contaAvvisi());
   }
 
-  void _apriIdee(Copie s) => _apriPagina(context, null, SchermataIdee(s: s));
+  void _apriIdee(Copie s, [BuildContext? ctx, int? evidenzia]) =>
+      _apriPagina(ctx ?? context, null, SchermataIdee(s: s, evidenzia: evidenzia));
 
   /// Tocco su una fonte della risposta dell'assistente.
   void _apriFonte(BuildContext ctx, AssistantSource fonte, Copie s) {
@@ -334,7 +335,9 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
         Navigator.of(ctx).popUntil((r) => r.isFirst);
         _vaiA(pInizio);
       case TipiFonte.avviso:
-        _apriAvvisi(s, ctx);
+        _apriAvvisi(s, ctx, fonte.id);
+      case TipiFonte.idea:
+        _apriIdee(s, ctx, fonte.id);
       case TipiFonte.miaSegnalazione || TipiFonte.segnalazione:
         final mia = fonte.type == TipiFonte.miaSegnalazione;
         _apriPagina(
@@ -2107,9 +2110,24 @@ class _IdeaItem {
   String get dateLabel => formattaData(createdAt);
 }
 
+/// Scorre la pagina fino all'elemento con [chiave] (avviso o idea aperti da Parky).
+void mostraInVista(GlobalKey chiave) {
+  final ctx = chiave.currentContext;
+  if (ctx == null) return;
+  final animazioni = !MediaQuery.of(ctx).disableAnimations;
+  Scrollable.ensureVisible(
+    ctx,
+    alignment: .15,
+    duration: animazioni ? const Duration(milliseconds: 400) : Duration.zero,
+    curve: Curves.easeOutCubic,
+  );
+}
+
 class SchermataIdee extends StatefulWidget {
   final Copie s;
-  const SchermataIdee({super.key, required this.s});
+  /// Idea da mettere in evidenza (es. dalle fonti dell'assistente).
+  final int? evidenzia;
+  const SchermataIdee({super.key, required this.s, this.evidenzia});
   @override
   State<SchermataIdee> createState() => _SchermataIdeeState();
 }
@@ -2120,6 +2138,8 @@ class _SchermataIdeeState extends State<SchermataIdee> {
   bool _caricamento = true;
   String? _errore;
   List<_IdeaItem> _idee = [];
+  final GlobalKey _chiaveEvidenziata = GlobalKey();
+  bool _evidenziataMostrata = false;
   List<Map<String, dynamic>> _categorie = const [_categoriaPredefinita];
   StreamSubscription<Map<String, dynamic>>? _live;
   Timer? _debounce;
@@ -2168,6 +2188,7 @@ class _SchermataIdeeState extends State<SchermataIdee> {
       final result = await CitizenApi.instance.getFeed(kind: 'suggestion', limit: 50);
       final rows = (result['items'] as List? ?? []).cast<Map<String, dynamic>>();
       if (mounted) setState(() { _idee = rows.map(_IdeaItem.fromJson).toList(); _caricamento = false; _errore = null; });
+      _mostraEvidenziata();
     } catch (e) {
       if (mounted) setState(() { _errore = e.toString(); _caricamento = false; });
     }
@@ -2188,10 +2209,20 @@ class _SchermataIdeeState extends State<SchermataIdee> {
     }
   }
 
+  /// Porta in vista l'idea indicata in [SchermataIdee.evidenzia], una volta sola.
+  void _mostraEvidenziata() {
+    if (widget.evidenzia == null || _evidenziataMostrata) return;
+    _evidenziataMostrata = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) => mostraInVista(_chiaveEvidenziata));
+  }
+
   Widget _schedaIdea(_IdeaItem idea, Copie s) {
+    final evidenziata = idea.id == widget.evidenzia;
     return Scheda(
+      key: evidenziata ? _chiaveEvidenziata : null,
       padding: const EdgeInsets.all(16),
-      coloreBordo: idea.mine ? sole.withValues(alpha: .45) : null,
+      colore: evidenziata ? soleChiaro : superficie,
+      coloreBordo: evidenziata ? soleScuro : idea.mine ? sole.withValues(alpha: .45) : null,
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           const IconaTonda(Icons.lightbulb_rounded, colore: soleScuro, sfondo: soleChiaro, dimensione: 40),
@@ -2424,6 +2455,7 @@ class _FoglioNuovaIdeaState extends State<_FoglioNuovaIdea> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class Avviso {
+  final int? id;
   final String categoria;
   final String? statoManutenzione;
   final IconData icona;
@@ -2435,6 +2467,7 @@ class Avviso {
   final String data;
 
   const Avviso({
+    this.id,
     required this.categoria,
     this.statoManutenzione,
     required this.icona,
@@ -2451,7 +2484,9 @@ class SchermataAvvisi extends StatefulWidget {
   final Copie s;
   /// Cambia ogni volta che l'utente apre la scheda: gli avvisi si ricaricano.
   final int aperture;
-  const SchermataAvvisi({super.key, required this.s, this.aperture = 0});
+  /// Avviso da mettere in evidenza (es. dalle fonti dell'assistente).
+  final int? evidenzia;
+  const SchermataAvvisi({super.key, required this.s, this.aperture = 0, this.evidenzia});
 
   @override
   State<SchermataAvvisi> createState() => _SchermataAvvisiState();
@@ -2460,6 +2495,8 @@ class SchermataAvvisi extends StatefulWidget {
 class _SchermataAvvisiState extends State<SchermataAvvisi> {
   String _filtro = 'tutti';
   List<Avviso> _avvisi = [];
+  final GlobalKey _chiaveEvidenziata = GlobalKey();
+  bool _evidenziataMostrata = false;
   bool _caricamento = true;
   String? _errore;
   StreamSubscription<Map<String, dynamic>>? _live;
@@ -2502,6 +2539,7 @@ class _SchermataAvvisiState extends State<SchermataAvvisi> {
         final level = item['level'] as String? ?? 'info';
         final category = level == 'alert' ? 'importante' : level == 'warning' ? 'manutenzione' : 'novita';
         return Avviso(
+          id: (item['id'] as num?)?.toInt(),
           categoria: category,
           icona: level == 'alert' ? Icons.priority_high_rounded : level == 'warning' ? Icons.handyman_rounded : Icons.new_releases_rounded,
           colore: level == 'alert' ? coralloScuro : level == 'warning' ? soleScuro : cieloScuro,
@@ -2513,6 +2551,10 @@ class _SchermataAvvisiState extends State<SchermataAvvisi> {
         );
       }).toList();
       if (mounted) setState(() { _avvisi = parsed; _caricamento = false; _errore = null; });
+      if (widget.evidenzia != null && !_evidenziataMostrata) {
+        _evidenziataMostrata = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) => mostraInVista(_chiaveEvidenziata));
+      }
     } catch (e) {
       // Un aggiornamento silenzioso fallito non cancella gli avvisi già mostrati.
       if (mounted && (!silenzioso || _avvisi.isEmpty)) setState(() { _errore = e.toString(); _caricamento = false; });
@@ -2536,10 +2578,12 @@ class _SchermataAvvisiState extends State<SchermataAvvisi> {
 
   Widget _schedaAvviso(Avviso avviso, Copie s) {
     final importante = avviso.categoria == 'importante';
+    final evidenziato = avviso.id != null && avviso.id == widget.evidenzia;
     return Scheda(
+      key: evidenziato ? _chiaveEvidenziata : null,
       padding: const EdgeInsets.all(16),
-      colore: importante ? const Color(0xFFFFF7F5) : superficie,
-      coloreBordo: importante ? corallo.withValues(alpha: .40) : null,
+      colore: evidenziato ? cieloChiaro : importante ? const Color(0xFFFFF7F5) : superficie,
+      coloreBordo: evidenziato ? cieloScuro : importante ? corallo.withValues(alpha: .40) : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

@@ -307,6 +307,17 @@ abstract final class TipiFonte {
   static const miaSegnalazione = 'my_report';
   static const categorie = 'categories';
   static const ambiente = 'environment';
+
+  /// Idea per il parco (segnalazione `suggestion`): si apre nella pagina Idee.
+  static const idea = 'suggestion';
+}
+
+/// Titolo breve di una segnalazione o idea: prima riga della descrizione, altrimenti codice e categoria.
+String titoloSegnalazione(Map<String, dynamic> r) {
+  final testo = (r['description'] as String? ?? '').trim();
+  final riga = testo.split('\n').first.trim();
+  if (riga.isNotEmpty) return riga;
+  return [r['code'], r['category_label']].whereType<String>().join(' · ');
 }
 
 class AssistantSource {
@@ -317,7 +328,20 @@ class AssistantSource {
   /// Chiavi JSON "from" e "to".
   final DateTime? from, to;
 
-  const AssistantSource({required this.type, this.id, this.parkId, this.stationId, this.metric, this.from, this.to});
+  /// Titolo dell'elemento (avviso, segnalazione, idea), mostrato sul link.
+  /// Se il backend non lo manda lo recupera l'app.
+  final String? title;
+
+  const AssistantSource({
+    required this.type,
+    this.id,
+    this.parkId,
+    this.stationId,
+    this.metric,
+    this.from,
+    this.to,
+    this.title,
+  });
 
   factory AssistantSource.fromJson(Map<String, dynamic> j) => AssistantSource(
     type: j['type'] as String? ?? '',
@@ -327,6 +351,18 @@ class AssistantSource {
     metric: j['metric'] as String?,
     from: _data(j['from']),
     to: _data(j['to']),
+    title: (j['title'] ?? j['label']) as String?,
+  );
+
+  AssistantSource conTitolo(String? titolo, {String? tipo}) => AssistantSource(
+    type: tipo ?? type,
+    id: id,
+    parkId: parkId,
+    stationId: stationId,
+    metric: metric,
+    from: from,
+    to: to,
+    title: titolo,
   );
 }
 

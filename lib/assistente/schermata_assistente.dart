@@ -63,6 +63,7 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
     ('Com’è l’aria adesso?', 'How is the air right now?'),
     ('Ci sono avvisi?', 'Are there any notices?'),
     ('A che punto è la mia segnalazione?', 'What is the status of my report?'),
+    ('Quali idee sono state proposte?', 'Which ideas have been suggested?'),
     ('Che temperatura massima c’è stata ieri?', 'What was the highest temperature yesterday?'),
   ];
 
@@ -116,11 +117,12 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
     try {
       final api = CitizenApi.instance;
       final risposta = await api.treeyes.askAssistant(await api.parcoInUso(), domanda.testo, _cronologiaPrima(domanda));
+      final fonti = await _conTitoli(risposta.sources);
       if (!mounted) return;
       setState(() {
         _disclaimer ??= risposta.disclaimer.isEmpty ? null : risposta.disclaimer;
         final indice = _messaggi.indexOf(domanda);
-        _messaggi.insert(indice + 1, _Messaggio(ChatTurn.assistente, risposta.answer, fonti: risposta.sources));
+        _messaggi.insert(indice + 1, _Messaggio(ChatTurn.assistente, risposta.answer, fonti: fonti));
       });
       SemanticsService.sendAnnouncement(View.of(context), risposta.answer, Directionality.of(context));
     } catch (e) {
@@ -134,6 +136,44 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
       if (mounted) setState(() => _inAttesa = false);
       _scorriInFondo();
     }
+  }
+
+  /// Completa le fonti senza titolo (il backend manda solo tipo e id) leggendo
+  /// avvisi e segnalazioni dall'app. Una segnalazione `suggestion` diventa un'idea.
+  /// Se qualcosa non si carica il chip resta con l'etichetta generica.
+  Future<List<AssistantSource>> _conTitoli(List<AssistantSource> fonti) async {
+    final api = CitizenApi.instance;
+    final senzaTitolo = fonti.where((f) => f.id != null && (f.title?.trim().isEmpty ?? true)).toList();
+    if (senzaTitolo.isEmpty) return fonti;
+
+    Map<int, String>? titoliAvvisi;
+    if (senzaTitolo.any((f) => f.type == TipiFonte.avviso)) {
+      try {
+        titoliAvvisi = {
+          for (final a in await api.getNotices())
+            if (a['id'] is num && a['title'] is String) (a['id'] as num).toInt(): a['title'] as String,
+        };
+      } catch (_) {}
+    }
+
+    Future<AssistantSource> completa(AssistantSource f) async {
+      if (f.id == null || (f.title?.trim().isNotEmpty ?? false)) return f;
+      switch (f.type) {
+        case TipiFonte.avviso:
+          return f.conTitolo(titoliAvvisi?[f.id]);
+        case TipiFonte.segnalazione || TipiFonte.miaSegnalazione || TipiFonte.idea:
+          try {
+            final r = await api.getReport(f.id!);
+            final idea = r['kind'] == 'suggestion';
+            return f.conTitolo(titoloSegnalazione(r), tipo: idea ? TipiFonte.idea : null);
+          } catch (_) {
+            return f;
+          }
+      }
+      return f;
+    }
+
+    return Future.wait(fonti.map(completa)).timeout(const Duration(seconds: 6), onTimeout: () => fonti);
   }
 
   (String, bool) _messaggioErrore(Object e, Copie s) {
@@ -317,8 +357,8 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
         const SizedBox(height: 4),
         Text(
           s.t(
-            'Chiedimi dello stato del parco, degli avvisi, delle tue segnalazioni e dell’aria.',
-            'Ask me about the park status, notices, your reports and the air.',
+            'Chiedimi dello stato del parco, degli avvisi, delle tue segnalazioni, delle idee e dell’aria.',
+            'Ask me about the park status, notices, your reports, ideas and the air.',
           ),
           textAlign: TextAlign.center,
           style: const TextStyle(fontSize: 14, color: testoSecondario),
@@ -569,17 +609,42 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
     TipiFonte.avviso => Icons.notifications_rounded,
     TipiFonte.miaSegnalazione => Icons.receipt_long_rounded,
     TipiFonte.segnalazione => Icons.place_rounded,
+    TipiFonte.idea => Icons.lightbulb_rounded,
     TipiFonte.ambiente => Icons.air_rounded,
     TipiFonte.categorie => Icons.add_location_alt_rounded,
     _ => Icons.link_rounded,
   };
 
+  /// Lunghezza massima del titolo sul chip.
+  static const int _maxTitolo = 38;
+
+  static String _accorcia(String t) {
+    final pulito = t.trim().replaceAll(RegExp(r'\s+'), ' ');
+    return pulito.length <= _maxTitolo ? pulito : '${pulito.substring(0, _maxTitolo - 1).trimRight()}…';
+  }
+
   /// Etichetta del chip; null per i tipi che l'app non sa aprire.
-  static String? _etichettaFonte(AssistantSource f, Copie s) => switch (f.type) {
+  /// Avvisi, segnalazioni e idee mostrano il proprio titolo, così i link si distinguono.
+  static String? _etichettaFonte(AssistantSource f, Copie s) {
+    final titolo = f.title?.trim();
+    if (titolo != null && titolo.isNotEmpty && _conTitolo.contains(f.type)) return _accorcia(titolo);
+    return _etichettaGenerica(f, s);
+  }
+
+  static const Set<String> _conTitolo = {
+    TipiFonte.avviso,
+    TipiFonte.miaSegnalazione,
+    TipiFonte.segnalazione,
+    TipiFonte.idea,
+  };
+
+  static String? _etichettaGenerica(AssistantSource f, Copie s) => switch (f.type) {
     TipiFonte.statoParco => s.t('Stato del parco', 'Park status'),
-    TipiFonte.avviso => s.t('Avviso', 'Notice'),
-    TipiFonte.miaSegnalazione => s.t('La tua segnalazione', 'Your report'),
-    TipiFonte.segnalazione => s.t('Segnalazione', 'Report'),
+    TipiFonte.avviso => f.id == null ? s.t('Avvisi', 'Notices') : s.t('Avviso n. ${f.id}', 'Notice #${f.id}'),
+    TipiFonte.miaSegnalazione =>
+      f.id == null ? s.t('Le tue segnalazioni', 'Your reports') : s.t('Tua segnalazione n. ${f.id}', 'Your report #${f.id}'),
+    TipiFonte.segnalazione => f.id == null ? s.t('Segnalazioni', 'Reports') : s.t('Segnalazione n. ${f.id}', 'Report #${f.id}'),
+    TipiFonte.idea => f.id == null ? s.t('Idee', 'Ideas') : s.t('Idea n. ${f.id}', 'Idea #${f.id}'),
     TipiFonte.ambiente => f.metric == null ? s.t('Dati ambientali', 'Environmental data') : s.t('Grafico', 'Chart'),
     TipiFonte.categorie => s.t('Segnala', 'Report'),
     _ => null,

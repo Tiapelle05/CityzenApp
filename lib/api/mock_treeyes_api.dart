@@ -97,7 +97,7 @@ class MockTreeyesApi implements TreeyesApi {
       return _risposta(
         base,
         'Sono Parky, l’assistente del parco. Posso dirti com’è l’aria, se ci sono avvisi, '
-        'a che punto sono le tue segnalazioni e cosa puoi segnalare.',
+        'a che punto sono le tue segnalazioni, quali idee sono state proposte e cosa puoi segnalare.',
         const [],
       );
     }
@@ -108,17 +108,46 @@ class MockTreeyesApi implements TreeyesApi {
         avvisi.isEmpty
             ? 'Non ci sono avvisi attivi nel parco.'
             : 'Ci sono ${avvisi.length} avvisi attivi: ${avvisi.map((a) => '«${a['title']}»').join(', ')}.',
-        [for (final a in avvisi) AssistantSource(type: TipiFonte.avviso, id: (a['id'] as num).toInt())],
+        [
+          for (final a in avvisi)
+            AssistantSource(type: TipiFonte.avviso, id: (a['id'] as num).toInt(), title: a['title'] as String?),
+        ],
+      );
+    }
+    // Le idee prima delle segnalazioni: "segnalare un'idea" parla di idee.
+    if (RegExp(r'\bide[ae]\b|\bideas?\b|propost|propor|suggeriment').hasMatch(q)) {
+      final idee = ((await DatiSimulati.instance.feed(kind: 'suggestion', limit: 5))['items'] as List)
+          .cast<Map<String, dynamic>>();
+      if (idee.isEmpty) {
+        return _risposta(base, 'Non ci sono ancora idee per il parco: puoi proporne una tu.', const []);
+      }
+      final mie = idee.where((i) => i['is_mine'] == true).length;
+      return _risposta(
+        base,
+        'Ecco le idee proposte per il parco: ${idee.map((i) => '«${titoloSegnalazione(i)}» (${(i['status_label'] as String).toLowerCase()})').join(', ')}.'
+        '${mie == 0 ? '' : mie == 1 ? ' Una è tua.' : ' $mie sono tue.'}',
+        [
+          for (final i in idee) AssistantSource(type: TipiFonte.idea, id: (i['id'] as num).toInt(), title: titoloSegnalazione(i)),
+        ],
       );
     }
     if (q.contains('segnalazion')) {
-      final mie = ((await DatiSimulati.instance.mie(limit: 3))['items'] as List).cast<Map<String, dynamic>>();
+      final mie = ((await DatiSimulati.instance.mie(limit: 20))['items'] as List)
+          .cast<Map<String, dynamic>>()
+          .where((r) => r['kind'] != 'suggestion')
+          .take(3)
+          .toList();
       if (mie.isEmpty) return _risposta(base, 'Non hai ancora inviato segnalazioni.', const []);
       final r = mie.first;
+      final altre = mie.skip(1).map((r) => '${r['code']} è «${r['status_label']}»').join(', ');
       return _risposta(
         base,
-        'La tua segnalazione più recente (${r['code']}, ${r['category_label']}) è «${r['status_label']}».',
-        [AssistantSource(type: TipiFonte.miaSegnalazione, id: (r['id'] as num).toInt())],
+        'La tua segnalazione più recente (${r['code']}, ${r['category_label']}) è «${r['status_label']}».'
+        '${altre.isEmpty ? '' : ' Le altre: $altre.'}',
+        [
+          for (final r in mie)
+            AssistantSource(type: TipiFonte.miaSegnalazione, id: (r['id'] as num).toInt(), title: titoloSegnalazione(r)),
+        ],
       );
     }
     if (q.contains('segnal') || q.contains('categori')) {
