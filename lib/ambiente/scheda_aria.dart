@@ -67,7 +67,7 @@ class SchedaAriaParco extends StatelessWidget {
                           etichettaMetrica(metrica, s, m),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 12, color: testoSecondario),
+                          style: TextStyle(fontSize: 12, color: testoSecondario),
                         ),
                       ],
                     ),
@@ -117,7 +117,7 @@ class SchedaAriaParco extends StatelessWidget {
                           ),
                           Text(
                             titolo,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w900,
                               color: testo,
@@ -142,7 +142,7 @@ class SchedaAriaParco extends StatelessWidget {
                     ),
                     const SizedBox(width: 5),
                     Expanded(
-                      child: Text(sottotitolo, style: const TextStyle(fontSize: 12.5, color: testoSecondario)),
+                      child: Text(sottotitolo, style: TextStyle(fontSize: 12.5, color: testoSecondario)),
                     ),
                   ],
                 ),
@@ -187,7 +187,7 @@ extension on SchedaAriaParco {
                     titolo,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 15.5, fontWeight: FontWeight.w900, color: testo, height: 1.2),
+                    style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w900, color: testo, height: 1.2),
                   ),
                   Text(
                     aggiornata
@@ -195,7 +195,7 @@ extension on SchedaAriaParco {
                         : s.t('Dati non aggiornati', 'Data not up to date'),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 12.5, color: testoSecondario),
+                    style: TextStyle(fontSize: 12.5, color: testoSecondario),
                   ),
                 ],
               ),

@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import 'ambiente/formato_ambiente.dart';
 import 'ambiente/scheda_aria.dart';
 import 'ambiente/schermata_ambiente.dart';
 import 'ambiente/stato_ambiente.dart';
@@ -40,26 +42,93 @@ class TreeyesApp extends ParkApp {
   const TreeyesApp({super.key}) : super();
 }
 
-class _ParkAppState extends State<ParkApp> {
+/// Come scegliere il tema: segue il sistema oppure è fissato dall'utente.
+enum ModoTema { sistema, chiaro, scuro }
+
+class _ParkAppState extends State<ParkApp> with WidgetsBindingObserver {
+  static const _chiaveTema = 'tema_app';
+
   bool _inglese = false;
   /// Falso finché l'utente non ha scelto un server o la demo: si mostra la pagina di accesso.
   bool _collegato = CitizenApi.instance.configurato;
   /// Cresce a ogni nuovo collegamento: tutte le schermate ricaricano i dati.
   int _sessione = 0;
-  final ThemeData _tema = temaTryees();
+  ModoTema _modoTema = ModoTema.sistema;
+  /// Tema già calcolato e per quale luminosità: si rifà solo quando cambia.
+  ThemeData? _tema;
+  bool? _temaScuro;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    unawaited(_leggiTema());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  Future<void> _leggiTema() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final salvato = ModoTema.values.asNameMap()[prefs.getString(_chiaveTema)];
+      if (salvato != null && salvato != _modoTema && mounted) _cambiaTema(salvato, salva: false);
+    } catch (_) {
+      // Senza preferenze salvate il tema segue il sistema.
+    }
+  }
+
+  bool get _scuro => switch (_modoTema) {
+        ModoTema.chiaro => false,
+        ModoTema.scuro => true,
+        ModoTema.sistema => WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark,
+      };
+
+  /// Cambia tema e ricostruisce tutte le schermate senza perderne lo stato.
+  void _cambiaTema(ModoTema modo, {bool salva = true}) {
+    setState(() => _modoTema = modo);
+    ricostruisciTutto(context);
+    if (salva) unawaited(_salvaTema(modo));
+  }
+
+  Future<void> _salvaTema(ModoTema modo) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_chiaveTema, modo.name);
+    } catch (_) {}
+  }
+
+  @override
+  void didChangePlatformBrightness() {
+    if (_modoTema != ModoTema.sistema) return;
+    setState(() {});
+    ricostruisciTutto(context);
+  }
 
   @override
   Widget build(BuildContext context) {
     void cambiaLingua(bool valore) => setState(() => _inglese = valore);
+    final scuro = _scuro;
+    if (_tema == null || _temaScuro != scuro) {
+      impostaTemaScuro(scuro);
+      _tema = temaTryees();
+      _temaScuro = scuro;
+    }
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Treeyes_Cityzen',
       theme: _tema,
+      themeAnimationDuration: Duration.zero,
       home: _collegato
           ? NavigazionePrincipale(
               key: ValueKey(_sessione),
               inglese: _inglese,
               onLinguaCambiata: cambiaLingua,
+              modoTema: _modoTema,
+              onTemaCambiato: _cambiaTema,
               demo: CitizenApi.instance.demoMode,
               onCambiaCollegamento: () => setState(() => _collegato = false),
               // Demo ⇄ server con un tocco: si ricostruiscono tutte le schermate.
@@ -80,6 +149,8 @@ class _ParkAppState extends State<ParkApp> {
 class NavigazionePrincipale extends StatefulWidget {
   final bool inglese;
   final ValueChanged<bool> onLinguaCambiata;
+  final ModoTema modoTema;
+  final ValueChanged<ModoTema>? onTemaCambiato;
   final bool demo;
   /// Torna alla pagina di accesso per scegliere un altro server o la demo.
   final VoidCallback? onCambiaCollegamento;
@@ -90,6 +161,8 @@ class NavigazionePrincipale extends StatefulWidget {
     super.key,
     required this.inglese,
     required this.onLinguaCambiata,
+    this.modoTema = ModoTema.sistema,
+    this.onTemaCambiato,
     this.demo = false,
     this.onCambiaCollegamento,
     this.onProfiloCambiato,
@@ -100,20 +173,27 @@ class NavigazionePrincipale extends StatefulWidget {
 }
 
 class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
-    with SingleTickerProviderStateMixin {
-  /// Schede della barra in basso. La mappa sta al centro: è la più usata.
-  static const int pInizio = 0, pSegnala = 1, pMappa = 2, pAria = 3, pAssistente = 4;
+    with TickerProviderStateMixin {
+  /// Schede della barra in basso. Segnala sta al centro: è l'azione principale.
+  static const int pInizio = 0, pMappa = 1, pSegnala = 2, pAria = 3, pAssistente = 4;
 
   /// Colore di ogni sezione, nello stesso ordine delle pagine.
   static const List<Accento> _accenti = [
     Accento.verde,
-    Accento.arancio,
     Accento.blu,
+    Accento.arancio,
     Accento.acqua,
     Accento.viola,
   ];
 
   int _pagina = pInizio;
+  /// Verso del cambio scheda: 1 verso destra, -1 verso sinistra.
+  int _direzione = 1;
+  /// 0 = barra in alto piena, 1 = ridotta (si scorre verso il basso).
+  late final AnimationController _testata = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 240),
+  );
   /// Cresce a ogni segnalazione inviata: la mappa si ricarica.
   int _invii = 0;
   /// Avvisi attivi (per il pallino sulla campanella) e se almeno uno è importante.
@@ -196,6 +276,7 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
     _debounceAvvisi?.cancel();
     _ambiente.dispose();
     _transizione.dispose();
+    _testata.dispose();
     super.dispose();
   }
 
@@ -217,15 +298,15 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
         backgroundColor: superficie,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(24),
-          side: const BorderSide(color: coralloScuro, width: 2),
+          side: BorderSide(color: coralloScuro, width: 2),
         ),
-        icon: const IconaTonda(Icons.warning_amber_rounded, colore: coralloScuro, sfondo: coralloChiaro, dimensione: 64),
+        icon: IconaTonda(Icons.warning_amber_rounded, colore: coralloScuro, sfondo: coralloChiaro, dimensione: 64),
         title: Semantics(
           liveRegion: true,
           child: Text(
             titolo == null || titolo.isEmpty ? s.t('Pericolo nel parco', 'Danger in the park') : titolo,
             textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900, color: coralloScuro),
+            style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900, color: coralloScuro),
           ),
         ),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -234,7 +315,7 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
             decoration: BoxDecoration(color: coralloChiaro, borderRadius: BorderRadius.circular(12)),
             child: Text(
               s.t('AVVISO DI SICUREZZA', 'SAFETY ALERT'),
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: coralloScuro, letterSpacing: .8),
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: coralloScuro, letterSpacing: .8),
             ),
           ),
           const SizedBox(height: 14),
@@ -243,13 +324,13 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
                 ? s.t('Evita la zona e segui le indicazioni del personale.', 'Avoid the area and follow staff instructions.')
                 : testoAvviso,
             textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 16, height: 1.4, color: testo),
+            style: TextStyle(fontSize: 16, height: 1.4, color: testo),
           ),
           const SizedBox(height: 10),
           Text(
             s.t('In caso di emergenza chiama il 112.', 'In an emergency call 112.'),
             textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: testoSecondario),
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: testoSecondario),
           ),
         ]),
         actionsAlignment: MainAxisAlignment.center,
@@ -298,8 +379,12 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
     if (indice != pAssistente) FocusManager.instance.primaryFocus?.unfocus();
     if (indice != _pagina) {
       HapticFeedback.selectionClick();
-      setState(() => _pagina = indice);
+      setState(() {
+        _direzione = indice > _pagina ? 1 : -1;
+        _pagina = indice;
+      });
       if (!MediaQuery.of(context).disableAnimations) _transizione.forward(from: 0);
+      _testata.reverse();
     }
     // GET periodico dei dati ambientali solo mentre Home o Aria sono visibili.
     final conAria = indice == pInizio || indice == pAria;
@@ -361,89 +446,123 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
     }
   }
 
-  Widget _selettoreLingua(Copie s) {
-    return PopupMenuButton<bool>(
-      tooltip: s.t('Cambia lingua', 'Change language'),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      position: PopupMenuPosition.under,
-      onSelected: widget.onLinguaCambiata,
-      itemBuilder: (context) => [
-        CheckedPopupMenuItem<bool>(
-          value: false,
-          checked: !widget.inglese,
-          child: const Row(children: [Text('🇮🇹'), SizedBox(width: 10), Text('Italiano')]),
-        ),
-        CheckedPopupMenuItem<bool>(
-          value: true,
-          checked: widget.inglese,
-          child: const Row(children: [Text('🇬🇧'), SizedBox(width: 10), Text('English')]),
-        ),
-      ],
-      // Solo la sigla, in un cerchio come la campanella: lascia spazio al marchio.
-      child: Container(
-        width: 40,
-        height: 40,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: superficie,
-          shape: BoxShape.circle,
-          border: Border.all(color: bordo),
-        ),
-        child: Text(
-          widget.inglese ? 'EN' : 'IT',
-          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: foresta, letterSpacing: .4),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _apriCollegamento(Copie s) async {
+  /// Pannello Impostazioni: lingua, tema e collegamento (demo o server).
+  Future<void> _apriImpostazioni() async {
+    var inglese = widget.inglese;
+    var modo = widget.modoTema;
     final demo = widget.demo;
     final server = CitizenApi.instance.baseUrl;
     final cambia = await showModalBottomSheet<bool>(
       context: context,
       showDragHandle: true,
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(22, 0, 22, 22),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(children: [
-                IconaTonda(
-                  demo ? Icons.science_rounded : Icons.cloud_done_rounded,
-                  colore: demo ? lavanda : foresta,
-                  sfondo: demo ? lavandaChiaro : menta,
-                  dimensione: 48,
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, aggiorna) {
+          final s = Copie(inglese);
+          Widget titolo(String t) => Padding(
+                padding: const EdgeInsets.only(top: 18, bottom: 8),
+                child: Text(
+                  t.toUpperCase(),
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: testoSecondario, letterSpacing: .9),
                 ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              );
+          return SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(22, 0, 22, 22),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(children: [
+                    IconaTonda(Icons.tune_rounded, colore: foresta, sfondo: menta, dimensione: 44),
+                    const SizedBox(width: 12),
                     Text(
-                      demo ? s.t('Modalità demo', 'Demo mode') : s.t('Collegato al server', 'Connected to the server'),
-                      style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w900),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      demo ? s.t('Dati simulati, nulla viene inviato.', 'Simulated data, nothing is sent.') : server,
-                      style: const TextStyle(fontSize: 14, color: testoSecondario),
+                      s.t('Impostazioni', 'Settings'),
+                      style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900, color: testo, letterSpacing: -.3),
                     ),
                   ]),
-                ),
-              ]),
-              const SizedBox(height: 20),
-              SizedBox(
-                height: 52,
-                child: FilledButton.tonalIcon(
-                  onPressed: () => Navigator.of(ctx).pop(true),
-                  icon: const Icon(Icons.swap_horiz_rounded),
-                  label: Text(demo ? s.t('Collegati a un server', 'Connect to a server') : s.t('Cambia server o usa la demo', 'Change server or use demo')),
-                ),
+                  titolo(s.t('Lingua', 'Language')),
+                  SegmentedButton<bool>(
+                    showSelectedIcon: false,
+                    segments: const [
+                      ButtonSegment(value: false, label: Text('🇮🇹  Italiano')),
+                      ButtonSegment(value: true, label: Text('🇬🇧  English')),
+                    ],
+                    selected: {inglese},
+                    onSelectionChanged: (v) {
+                      aggiorna(() => inglese = v.first);
+                      widget.onLinguaCambiata(v.first);
+                    },
+                  ),
+                  titolo(s.t('Tema', 'Theme')),
+                  SegmentedButton<ModoTema>(
+                    showSelectedIcon: false,
+                    segments: [
+                      ButtonSegment(
+                        value: ModoTema.sistema,
+                        icon: const Icon(Icons.brightness_auto_rounded, size: 18),
+                        label: Text(s.t('Sistema', 'System')),
+                      ),
+                      ButtonSegment(
+                        value: ModoTema.chiaro,
+                        icon: const Icon(Icons.light_mode_rounded, size: 18),
+                        label: Text(s.t('Chiaro', 'Light')),
+                      ),
+                      ButtonSegment(
+                        value: ModoTema.scuro,
+                        icon: const Icon(Icons.dark_mode_rounded, size: 18),
+                        label: Text(s.t('Scuro', 'Dark')),
+                      ),
+                    ],
+                    selected: {modo},
+                    onSelectionChanged: (v) {
+                      aggiorna(() => modo = v.first);
+                      widget.onTemaCambiato?.call(v.first);
+                    },
+                  ),
+                  if (widget.onCambiaCollegamento != null) ...[
+                    titolo(s.t('Dati', 'Data')),
+                    SegmentedButton<bool>(
+                      showSelectedIcon: false,
+                      segments: [
+                        ButtonSegment(
+                          value: true,
+                          icon: const Icon(Icons.science_rounded, size: 18),
+                          label: Text(s.t('Demo', 'Demo')),
+                        ),
+                        ButtonSegment(
+                          value: false,
+                          icon: const Icon(Icons.cloud_done_rounded, size: 18),
+                          label: Text(s.t('Server', 'Server')),
+                        ),
+                      ],
+                      selected: {demo},
+                      onSelectionChanged: (v) {
+                        Navigator.of(ctx).pop(false);
+                        _cambiaProfilo(v.first);
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    Row(children: [
+                      Icon(demo ? Icons.info_outline_rounded : Icons.dns_rounded, size: 18, color: testoSecondario),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          demo ? s.t('Dati simulati, nulla viene inviato.', 'Simulated data, nothing is sent.') : server,
+                          style: TextStyle(fontSize: 13.5, color: testoSecondario),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.of(ctx).pop(true),
+                        child: Text(s.t('Cambia server', 'Change server')),
+                      ),
+                    ]),
+                  ],
+                ],
               ),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
     if (cambia == true) {
@@ -452,47 +571,73 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
     }
   }
 
-  /// Tasto unico Demo/Server nella barra in alto: mostra il profilo attivo e un
-  /// tocco passa all'altro. Una pressione lunga apre i dettagli del collegamento
-  /// (per cambiare server).
-  Widget _pulsanteCollegamento(Copie s) {
-    final demo = widget.demo;
-    final colore = demo ? lavanda : foresta;
-    final etichetta = demo ? 'Demo' : 'Server';
-    final altro = demo ? 'Server' : 'Demo';
-    return Semantics(
-      button: true,
-      label: s.t('Modalità $etichetta', '$etichetta mode'),
-      hint: s.t('Tocca per passare a $altro', 'Tap to switch to $altro'),
-      excludeSemantics: true,
-      child: Tooltip(
-        message: s.t(
-          'Tocca per passare a $altro · tieni premuto per i dettagli',
-          'Tap to switch to $altro · long press for details',
+  /// Pulsante tondo della barra in alto (tema, impostazioni, avvisi).
+  Widget _tondo({required String tooltip, required VoidCallback onPressed, required Widget icona}) => IconButton(
+        tooltip: tooltip,
+        onPressed: onPressed,
+        style: IconButton.styleFrom(
+          backgroundColor: superficie,
+          side: BorderSide(color: bordo),
+          minimumSize: const Size(40, 40),
+          fixedSize: const Size(40, 40),
+          padding: EdgeInsets.zero,
         ),
+        icon: icona,
+      );
+
+  /// Piccolo segnale «DEMO» quando i dati sono simulati: un tocco apre le impostazioni.
+  Widget _badgeDemo(Copie s) {
+    if (!widget.demo && !_cambioProfilo) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: Semantics(
+        button: true,
+        label: s.t('Modalità demo, apri le impostazioni', 'Demo mode, open settings'),
+        excludeSemantics: true,
         child: Material(
-          color: demo ? lavandaChiaro : menta,
-          shape: StadiumBorder(side: BorderSide(color: colore.withValues(alpha: .35))),
+          color: lavandaChiaro,
+          shape: StadiumBorder(side: BorderSide(color: lavanda.withValues(alpha: .35))),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
-            onTap: _cambioProfilo ? null : () => _cambiaProfilo(!demo),
-            onLongPress: _cambioProfilo ? null : () => _apriCollegamento(s),
-            child: Container(
-              constraints: const BoxConstraints(minHeight: 40),
-              padding: const EdgeInsets.symmetric(horizontal: 12),
+            onTap: _apriImpostazioni,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               child: Row(mainAxisSize: MainAxisSize.min, children: [
                 if (_cambioProfilo)
-                  SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: colore))
+                  SizedBox(width: 13, height: 13, child: CircularProgressIndicator(strokeWidth: 2, color: lavanda))
                 else
-                  Icon(demo ? Icons.science_rounded : Icons.cloud_done_rounded, size: 18, color: colore),
-                const SizedBox(width: 6),
-                Text(
-                  etichetta.toUpperCase(),
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: colore, letterSpacing: .5),
-                ),
+                  Icon(Icons.science_rounded, size: 14, color: lavanda),
+                const SizedBox(width: 4),
+                Text('DEMO', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: lavanda, letterSpacing: .6)),
               ]),
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  /// Interruttore del tema: un tocco passa da chiaro a scuro e viceversa.
+  Widget _interruttoreTema(Copie s) {
+    final scuro = temaScuro;
+    return _tondo(
+      tooltip: scuro ? s.t('Passa al tema chiaro', 'Switch to light theme') : s.t('Passa al tema scuro', 'Switch to dark theme'),
+      onPressed: () {
+        HapticFeedback.selectionClick();
+        widget.onTemaCambiato?.call(scuro ? ModoTema.chiaro : ModoTema.scuro);
+      },
+      icona: AnimatedSwitcher(
+        duration: durata(context, 380),
+        switchInCurve: Curves.easeOutBack,
+        transitionBuilder: (figlio, a) => RotationTransition(
+          turns: Tween<double>(begin: -.35, end: 0).animate(a),
+          child: ScaleTransition(scale: a, child: FadeTransition(opacity: a, child: figlio)),
+        ),
+        child: Icon(
+          scuro ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+          key: ValueKey(scuro),
+          size: 20,
+          color: scuro ? sole : foresta,
         ),
       ),
     );
@@ -504,16 +649,10 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
     final etichetta = _avvisiAttivi == 0
         ? s.t('Avvisi del parco', 'Park notices')
         : s.t('Avvisi del parco: $_avvisiAttivi attivi', 'Park notices: $_avvisiAttivi active');
-    return IconButton(
+    return _tondo(
       tooltip: etichetta,
       onPressed: () => _apriAvvisi(s),
-      style: IconButton.styleFrom(
-        backgroundColor: superficie,
-        side: const BorderSide(color: bordo),
-        minimumSize: const Size(40, 40),
-        padding: EdgeInsets.zero,
-      ),
-      icon: Badge(
+      icona: Badge(
         isLabelVisible: _avvisiAttivi > 0,
         backgroundColor: _avvisiUrgenti ? coralloScuro : lavanda,
         label: Text('$_avvisiAttivi'),
@@ -526,42 +665,39 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
     );
   }
 
-  /// Pulsante della mappa al centro della barra: sempre pieno e un po' più grande.
-  Widget _iconaMappa(bool selezionata) => AnimatedContainer(
-        duration: durata(context, 220),
-        curve: Curves.easeOutCubic,
-        width: 56,
-        height: 30,
-        decoration: BoxDecoration(
-          color: selezionata ? cieloScuro : cielo,
-          borderRadius: BorderRadius.circular(15),
-          boxShadow: [
-            BoxShadow(
-              color: cieloScuro.withValues(alpha: selezionata ? .40 : .22),
-              blurRadius: selezionata ? 14 : 8,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Icon(selezionata ? Icons.map_rounded : Icons.map_outlined, color: Colors.white, size: 24),
-      );
+  /// La barra in alto si riduce quando si scorre verso il basso e torna
+  /// piena scorrendo verso l'alto. Solo sulle pagine che scorrono in verticale.
+  bool _suScorrimento(ScrollUpdateNotification n) {
+    if (n.metrics.axis != Axis.vertical) return false;
+    if (_pagina == pMappa || _pagina == pAssistente) return false;
+    final delta = n.scrollDelta ?? 0;
+    if (n.metrics.pixels <= 8 || delta < -6) {
+      if (_testata.value > 0 && _testata.status != AnimationStatus.reverse) _testata.reverse();
+    } else if (delta > 6 && n.metrics.pixels > 40) {
+      if (_testata.value < 1 && _testata.status != AnimationStatus.forward) _testata.forward();
+    }
+    return false;
+  }
 
   @override
   Widget build(BuildContext context) {
     final s = Copie(widget.inglese);
-    final accento = _accenti[_pagina];
     final pagine = [
       SchermataInizio(
         key: ValueKey('inizio-$_invii'),
         s: s,
         ambiente: _ambiente,
-        onSegnalazioni: () => _vaiA(pSegnala),
         onMappa: () => _vaiA(pMappa),
         onAria: () => _vaiA(pAria),
         onIdee: () => _apriIdee(s),
         onAvvisi: () => _apriAvvisi(s),
-        onChiedi: () => _vaiA(pAssistente),
+        onMieSegnalazioni: () => _apriPagina(
+          context,
+          s.t('Le mie segnalazioni', 'My reports'),
+          SchermataSegnalazioni(s: s, soloMie: true),
+        ),
       ),
+      SchermataSegnalazioni(key: ValueKey('mappa-$_invii'), s: s),
       SchermataSegnalazione(
         s: s,
         onInviata: () {
@@ -570,138 +706,320 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
           _vaiA(pMappa);
         },
       ),
-      SchermataSegnalazioni(key: ValueKey('mappa-$_invii'), s: s),
       SchermataAmbiente(stato: _ambiente, s: s, incorporata: true),
       SchermataAssistente(s: s, incorporata: true, onFonte: (ctx, fonte) => _apriFonte(ctx, fonte, s)),
     ];
     final curva = CurvedAnimation(parent: _transizione, curve: Curves.easeOutCubic);
 
-    return Scaffold(
-      appBar: AppBar(
-        titleSpacing: 16,
-        toolbarHeight: 64,
-        // Marchio su due righe (Treeyes / CITYZEN) che si rimpicciolisce invece di
-        // troncarsi: così resta leggibile accanto a Demo|Server, lingua e avvisi.
-        title: Row(
-          children: [
-            Image.asset('Assets/logo_treeyes.png', height: 40, semanticLabel: 'Treeyes_Cityzen'),
-            const SizedBox(width: 8),
-            const Flexible(
+    // Corpo e barra in basso si costruiscono qui: l'animazione della barra in
+    // alto ricostruisce solo lo Scaffold, non le pagine.
+    final corpo = SafeArea(
+      top: false,
+      bottom: false,
+      child: NotificationListener<ScrollUpdateNotification>(
+        onNotification: _suScorrimento,
+        child: FadeTransition(
+          opacity: curva,
+          child: SlideTransition(
+            position: Tween<Offset>(begin: Offset(.06 * _direzione, 0), end: Offset.zero).animate(curva),
+            child: IndexedStack(index: _pagina, children: pagine),
+          ),
+        ),
+      ),
+    );
+    final barra = BarraSchede(
+      selezionata: _pagina,
+      centrale: pSegnala,
+      accenti: _accenti,
+      onSeleziona: _vaiA,
+      voci: [
+        VoceBarra(Icons.home_outlined, Icons.home_rounded, s.t('Inizio', 'Home')),
+        VoceBarra(Icons.map_outlined, Icons.map_rounded, s.t('Mappa', 'Map')),
+        VoceBarra(Icons.add_location_alt_rounded, Icons.add_location_alt_rounded, s.t('Segnala', 'Report')),
+        VoceBarra(Icons.air_rounded, Icons.air_rounded, s.t('Aria', 'Air')),
+        VoceBarra(Icons.forum_outlined, Icons.forum_rounded, nomeAssistente),
+      ],
+    );
+    final azioni = [
+      _badgeDemo(s),
+      _interruttoreTema(s),
+      const SizedBox(width: 6),
+      _tondo(
+        tooltip: s.t('Impostazioni', 'Settings'),
+        onPressed: _apriImpostazioni,
+        icona: Icon(Icons.tune_rounded, size: 20, color: foresta),
+      ),
+      const SizedBox(width: 6),
+      _campanella(s),
+      const SizedBox(width: 12),
+    ];
+
+    return AnimatedBuilder(
+      animation: _testata,
+      builder: (context, _) {
+        final t = Curves.easeOutCubic.transform(_testata.value);
+        double tra(double a, double b) => a + (b - a) * t;
+        return Scaffold(
+          appBar: AppBar(
+            titleSpacing: 16,
+            toolbarHeight: tra(64, 52),
+            backgroundColor: Color.lerp(sfondo, superficie, t),
+            shape: Border(bottom: BorderSide(color: bordo.withValues(alpha: t))),
+            // Marchio su due righe (Treeyes / CITYZEN) che si rimpicciolisce
+            // scorrendo e quando lo spazio è poco, senza mai troncarsi.
+            title: SizedBox(
+              height: tra(42, 30),
               child: FittedBox(
                 fit: BoxFit.scaleDown,
                 alignment: Alignment.centerLeft,
-                child: Column(
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Treeyes',
-                      style: TextStyle(
-                        fontSize: 23,
-                        height: 1.05,
-                        fontWeight: FontWeight.w800,
-                        color: forestaScura,
-                        letterSpacing: -.4,
-                      ),
-                    ),
-                    Text(
-                      'CITYZEN',
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        height: 1.2,
-                        fontWeight: FontWeight.w800,
-                        color: foresta,
-                        letterSpacing: 2.2,
-                      ),
+                    Image.asset('Assets/logo_treeyes.png', height: 40, semanticLabel: 'Treeyes_Cityzen'),
+                    const SizedBox(width: 8),
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Treeyes',
+                          style: TextStyle(
+                            fontSize: 23,
+                            height: 1.05,
+                            fontWeight: FontWeight.w800,
+                            color: forestaScura,
+                            letterSpacing: -.4,
+                          ),
+                        ),
+                        Text(
+                          'CITYZEN',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            height: 1.2,
+                            fontWeight: FontWeight.w800,
+                            color: foresta,
+                            letterSpacing: 2.2,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
               ),
             ),
-          ],
-        ),
-        actions: [
-          if (widget.onCambiaCollegamento != null) ...[
-            _pulsanteCollegamento(s),
-            const SizedBox(width: 6),
-          ],
-          _selettoreLingua(s),
-          const SizedBox(width: 6),
-          _campanella(s),
-          const SizedBox(width: 12),
-        ],
-      ),
-      body: SafeArea(
-        top: false,
-        child: FadeTransition(
-          opacity: curva,
-          child: SlideTransition(
-            position: Tween<Offset>(begin: const Offset(0, .015), end: Offset.zero).animate(curva),
-            child: IndexedStack(index: _pagina, children: pagine),
+            actions: azioni,
           ),
-        ),
+          body: corpo,
+          bottomNavigationBar: barra,
+        );
+      },
+    );
+  }
+}
+
+/// Una voce della barra in basso.
+class VoceBarra {
+  final IconData icona;
+  final IconData iconaAttiva;
+  final String etichetta;
+  const VoceBarra(this.icona, this.iconaAttiva, this.etichetta);
+}
+
+/// Barra delle schede in basso: un indicatore colorato scivola sotto la voce
+/// aperta e la voce [centrale] è un pulsante pieno in rilievo (Segnala).
+class BarraSchede extends StatelessWidget {
+  final int selezionata;
+  final int centrale;
+  final List<VoceBarra> voci;
+  final List<Accento> accenti;
+  final ValueChanged<int> onSeleziona;
+
+  const BarraSchede({
+    super.key,
+    required this.selezionata,
+    required this.centrale,
+    required this.voci,
+    required this.accenti,
+    required this.onSeleziona,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final basso = MediaQuery.paddingOf(context).bottom;
+    final accento = accenti[selezionata];
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: superficie,
+        border: Border(top: BorderSide(color: bordo)),
+        boxShadow: [BoxShadow(color: ombra, blurRadius: 20, offset: const Offset(0, -4))],
       ),
-      bottomNavigationBar: DecoratedBox(
-        decoration: const BoxDecoration(
-          color: superficie,
-          border: Border(top: BorderSide(color: bordo)),
-          boxShadow: [BoxShadow(color: Color(0x0F12261B), blurRadius: 20, offset: Offset(0, -4))],
-        ),
-        child: NavigationBarTheme(
-          // L'indicatore prende il colore della sezione aperta; la mappa ha già il suo pulsante pieno.
-          data: NavigationBarTheme.of(context).copyWith(
-            height: 72,
-            indicatorColor: _pagina == pMappa ? Colors.transparent : accento.tinta,
-            labelTextStyle: WidgetStateProperty.resolveWith(
-              (stati) => TextStyle(
-                fontSize: 12,
-                fontWeight: stati.contains(WidgetState.selected) ? FontWeight.w800 : FontWeight.w600,
-                color: stati.contains(WidgetState.selected) ? accento.forte : testoSecondario,
-              ),
-            ),
-            iconTheme: WidgetStateProperty.resolveWith(
-              (stati) => IconThemeData(
-                size: 24,
-                color: stati.contains(WidgetState.selected) ? accento.forte : testoSecondario,
-              ),
-            ),
-          ),
-          child: NavigationBar(
-            selectedIndex: _pagina,
-            onDestinationSelected: _vaiA,
-            labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-            destinations: [
-              NavigationDestination(
-                icon: const Icon(Icons.home_outlined),
-                selectedIcon: const Icon(Icons.home_rounded),
-                label: s.t('Inizio', 'Home'),
-              ),
-              NavigationDestination(
-                icon: const Icon(Icons.add_location_alt_outlined),
-                selectedIcon: const Icon(Icons.add_location_alt_rounded),
-                label: s.t('Segnala', 'Report'),
-              ),
-              NavigationDestination(
-                icon: _iconaMappa(false),
-                selectedIcon: _iconaMappa(true),
-                label: s.t('Mappa', 'Map'),
-              ),
-              NavigationDestination(
-                icon: const Icon(Icons.air_rounded),
-                selectedIcon: const Icon(Icons.air_rounded),
-                label: s.t('Aria', 'Air'),
-              ),
-              NavigationDestination(
-                icon: const Icon(Icons.forum_outlined),
-                selectedIcon: const Icon(Icons.forum_rounded),
-                label: nomeAssistente,
-              ),
-            ],
+      child: Padding(
+        padding: EdgeInsets.only(bottom: basso),
+        child: SizedBox(
+          height: 76,
+          child: LayoutBuilder(
+            builder: (context, vincoli) {
+              final larghezza = vincoli.maxWidth / voci.length;
+              const lIndicatore = 60.0;
+              return Stack(
+                children: [
+                  AnimatedPositioned(
+                    duration: durata(context, 420),
+                    curve: Curves.easeOutBack,
+                    left: selezionata * larghezza + (larghezza - lIndicatore) / 2,
+                    top: 10,
+                    width: lIndicatore,
+                    height: 32,
+                    child: AnimatedOpacity(
+                      duration: durata(context, 200),
+                      opacity: selezionata == centrale ? 0 : 1,
+                      child: AnimatedContainer(
+                        duration: durata(context, 300),
+                        decoration: BoxDecoration(color: accento.tinta, borderRadius: BorderRadius.circular(16)),
+                      ),
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      for (final (i, v) in voci.indexed)
+                        Expanded(
+                          child: i == centrale
+                              ? _VoceCentrale(
+                                  voce: v,
+                                  selezionata: i == selezionata,
+                                  accento: accenti[i],
+                                  onTap: () => onSeleziona(i),
+                                )
+                              : _Voce(
+                                  voce: v,
+                                  selezionata: i == selezionata,
+                                  accento: accenti[i],
+                                  onTap: () => onSeleziona(i),
+                                ),
+                        ),
+                    ],
+                  ),
+                ],
+              );
+            },
           ),
         ),
       ),
     );
   }
+}
+
+class _Voce extends StatelessWidget {
+  final VoceBarra voce;
+  final bool selezionata;
+  final Accento accento;
+  final VoidCallback onTap;
+  const _Voce({required this.voce, required this.selezionata, required this.accento, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final colore = selezionata ? accento.forte : testoSecondario;
+    return Semantics(
+      button: true,
+      selected: selezionata,
+      label: voce.etichetta,
+      excludeSemantics: true,
+      child: Premibile(
+        onTap: onTap,
+        child: Column(
+          children: [
+            const SizedBox(height: 10),
+            SizedBox(
+              height: 32,
+              child: Center(
+                child: AnimatedSwitcher(
+                  duration: durata(context, 260),
+                  switchInCurve: Curves.easeOutBack,
+                  transitionBuilder: (figlio, a) => ScaleTransition(scale: a, child: FadeTransition(opacity: a, child: figlio)),
+                  child: Icon(
+                    selezionata ? voce.iconaAttiva : voce.icona,
+                    key: ValueKey(selezionata),
+                    size: 24,
+                    color: colore,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            AnimatedDefaultTextStyle(
+              duration: durata(context, 220),
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: selezionata ? FontWeight.w800 : FontWeight.w600,
+                color: colore,
+              ),
+              child: Text(voce.etichetta, maxLines: 1, overflow: TextOverflow.ellipsis),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Pulsante centrale pieno: l'azione principale dell'app.
+class _VoceCentrale extends StatelessWidget {
+  final VoceBarra voce;
+  final bool selezionata;
+  final Accento accento;
+  final VoidCallback onTap;
+  const _VoceCentrale({required this.voce, required this.selezionata, required this.accento, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+        button: true,
+        selected: selezionata,
+        label: voce.etichetta,
+        excludeSemantics: true,
+        child: Premibile(
+          onTap: onTap,
+          scala: .88,
+          child: Column(
+            children: [
+              const SizedBox(height: 2),
+              AnimatedScale(
+                scale: selezionata ? 1.06 : 1,
+                duration: durata(context, 320),
+                curve: Curves.easeOutBack,
+                child: AnimatedContainer(
+                  duration: durata(context, 260),
+                  width: 56,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Color(0xFFF26B3F), Color(0xFFD9431C)],
+                    ),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: selezionata ? superficie : Colors.transparent, width: 2),
+                    boxShadow: [
+                      BoxShadow(
+                        color: corallo.withValues(alpha: selezionata ? .55 : .35),
+                        blurRadius: selezionata ? 18 : 10,
+                        offset: const Offset(0, 5),
+                      ),
+                    ],
+                  ),
+                  child: Icon(voce.icona, color: Colors.white, size: 25),
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                voce.etichetta,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: accento.forte),
+              ),
+            ],
+          ),
+        ),
+      );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -710,27 +1028,24 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
 
 class SchermataInizio extends StatefulWidget {
   final Copie s;
-  final VoidCallback onSegnalazioni;
   final VoidCallback? onMappa;
   /// Apre la scheda «Aria» (senza, si apre la schermata Ambiente sopra la Home).
   final VoidCallback? onAria;
   final VoidCallback? onIdee;
   final VoidCallback? onAvvisi;
-  /// Dati ambientali (card "Aria nel parco" e banner di allerta); senza, non compaiono.
+  final VoidCallback? onMieSegnalazioni;
+  /// Dati ambientali (scheda di benvenuto e banner di allerta); senza, non compaiono.
   final StatoAmbiente? ambiente;
-  /// Apre la chat con l'assistente.
-  final VoidCallback? onChiedi;
 
   const SchermataInizio({
     super.key,
     required this.s,
-    required this.onSegnalazioni,
     this.onMappa,
     this.onAria,
     this.onIdee,
     this.onAvvisi,
+    this.onMieSegnalazioni,
     this.ambiente,
-    this.onChiedi,
   });
 
   @override
@@ -752,33 +1067,11 @@ class _SchermataInizioState extends State<SchermataInizio> {
     if (ambiente != null) apriAmbiente(context, ambiente, widget.s);
   }
 
-  /// Saluto in base all'ora: la Home si apre ogni giorno, non è una vetrina.
-  String _saluto(Copie s) {
-    final ora = DateTime.now().hour;
-    if (ora >= 5 && ora < 13) return s.t('Buongiorno', 'Good morning');
-    if (ora >= 13 && ora < 18) return s.t('Buon pomeriggio', 'Good afternoon');
-    return s.t('Buonasera', 'Good evening');
-  }
-
   @override
   Widget build(BuildContext context) {
     final s = widget.s;
     final ambiente = widget.ambiente;
     final scorciatoie = [
-      _ScorciatoiaHome(
-        icona: Icons.add_location_alt_rounded,
-        etichetta: s.t('Segnala', 'Report'),
-        accento: Accento.arancio,
-        piena: true,
-        onTap: widget.onSegnalazioni,
-      ),
-      if (widget.onChiedi != null)
-        _ScorciatoiaHome(
-          icona: Icons.forum_rounded,
-          etichetta: nomeAssistente,
-          accento: Accento.viola,
-          onTap: widget.onChiedi,
-        ),
       _ScorciatoiaHome(
         icona: Icons.lightbulb_rounded,
         etichetta: s.t('Idee', 'Ideas'),
@@ -786,11 +1079,18 @@ class _SchermataInizioState extends State<SchermataInizio> {
         onTap: widget.onIdee,
       ),
       _ScorciatoiaHome(
-        icona: Icons.notifications_rounded,
+        icona: Icons.campaign_rounded,
         etichetta: s.t('Avvisi', 'Notices'),
         accento: Accento.blu,
         onTap: widget.onAvvisi,
       ),
+      if (widget.onMieSegnalazioni != null)
+        _ScorciatoiaHome(
+          icona: Icons.person_pin_circle_rounded,
+          etichetta: s.t('Le mie segnalazioni', 'My reports'),
+          accento: Accento.arancio,
+          onTap: widget.onMieSegnalazioni,
+        ),
     ];
 
     // La Home riempie lo schermo: la mappa prende tutto lo spazio che resta.
@@ -806,19 +1106,19 @@ class _SchermataInizioState extends State<SchermataInizio> {
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 760),
                 child: SizedBox(
-                  height: vincoli.maxHeight < 600 ? 600 : vincoli.maxHeight,
+                  height: vincoli.maxHeight < 640 ? 640 : vincoli.maxHeight,
                   child: Padding(
                     padding: EdgeInsets.fromLTRB(stretto ? 16 : 20, 4, stretto ? 16 : 20, 16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Appare(
-                          child: TitoloPagina(
-                            titolo: _saluto(s),
-                            descrizione: s.t('Ecco il parco in questo momento', 'Here is the park right now'),
+                        Appare(child: SchedaBenvenuto(s: s, ambiente: ambiente, onAria: _apriAmbiente)),
+                        if (ambiente != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 12),
+                            child: BannerAllerteAmbiente(stato: ambiente, s: s, onApri: _apriAmbiente),
                           ),
-                        ),
-                        if (ambiente != null) BannerAllerteAmbiente(stato: ambiente, s: s, onApri: _apriAmbiente),
+                        const SizedBox(height: 12),
                         Appare(
                           indice: 1,
                           child: Row(
@@ -830,23 +1130,10 @@ class _SchermataInizioState extends State<SchermataInizio> {
                             ],
                           ),
                         ),
-                        if (ambiente != null)
-                          Appare(
-                            indice: 2,
-                            child: ListenableBuilder(
-                              listenable: ambiente,
-                              builder: (context, figlio) =>
-                                  (ambiente.ambiente?.stations.isNotEmpty ?? false) ? figlio! : const SizedBox.shrink(),
-                              child: Padding(
-                                padding: const EdgeInsets.only(top: 14),
-                                child: SchedaAriaParco(stato: ambiente, s: s, onApri: _apriAmbiente, compatta: true),
-                              ),
-                            ),
-                          ),
                         const SizedBox(height: 14),
                         Expanded(
                           child: Appare(
-                            indice: 3,
+                            indice: 2,
                             child: AnteprimaMappa(
                               key: ValueKey(_aggiornamenti),
                               s: s,
@@ -868,68 +1155,269 @@ class _SchermataInizioState extends State<SchermataInizio> {
   }
 }
 
-/// Scorciatoia quadrata della Home: icona e una parola.
+/// Scheda di benvenuto in cima alla Home: saluto in base all'ora e, se il
+/// parco ha sensori, il giudizio sull'aria con la temperatura.
+class SchedaBenvenuto extends StatelessWidget {
+  final Copie s;
+  final StatoAmbiente? ambiente;
+  final VoidCallback onAria;
+  const SchedaBenvenuto({super.key, required this.s, required this.ambiente, required this.onAria});
+
+  /// Saluto in base all'ora: la Home si apre ogni giorno, non è una vetrina.
+  String _saluto() {
+    final ora = DateTime.now().hour;
+    if (ora >= 5 && ora < 13) return s.t('Buongiorno', 'Good morning');
+    if (ora >= 13 && ora < 18) return s.t('Buon pomeriggio', 'Good afternoon');
+    return s.t('Buonasera', 'Good evening');
+  }
+
+  IconData _iconaOra() {
+    final ora = DateTime.now().hour;
+    if (ora >= 6 && ora < 18) return Icons.wb_sunny_rounded;
+    if (ora >= 18 && ora < 21) return Icons.wb_twilight_rounded;
+    return Icons.nightlight_round;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colori = temaScuro
+        ? const [Color(0xFF123A2A), Color(0xFF1B5A3F)]
+        : const [Color(0xFF17694A), Color(0xFF2FA36B)];
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(26),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: colori),
+        ),
+        child: Stack(
+          children: [
+            // Cerchi decorativi: danno profondità senza immagini.
+            Positioned(right: -40, top: -50, child: _cerchio(150, .08)),
+            Positioned(right: 50, bottom: -60, child: _cerchio(110, .06)),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Semantics(
+                          header: true,
+                          child: Text(
+                            _saluto(),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 26,
+                              height: 1.1,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -.5,
+                            ),
+                          ),
+                        ),
+                      ),
+                      _IconaOscillante(icona: _iconaOra()),
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    s.t('Ecco il parco in questo momento', 'Here is the park right now'),
+                    style: TextStyle(fontSize: 14, color: Colors.white.withValues(alpha: .85)),
+                  ),
+                  if (ambiente != null) _riquadroAria(ambiente!),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _cerchio(double d, double alfa) => Container(
+        width: d,
+        height: d,
+        decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: alfa)),
+      );
+
+  /// Riga «vetro» con il giudizio sull'aria e la temperatura che sale fino al valore.
+  Widget _riquadroAria(StatoAmbiente stato) => ListenableBuilder(
+        listenable: stato,
+        builder: (context, _) {
+          final a = stato.ambiente;
+          if (a == null || a.stations.isEmpty) return const SizedBox.shrink();
+          final st = a.stations.first;
+          final aggiornata = st.fresh;
+          final titolo = aggiornata ? testoAria(a.airQuality, s) : s.t('Dati non aggiornati', 'Data not up to date');
+          final temp = st.lettura(Metriche.temperatura);
+          final mTemp = stato.metrica(Metriche.temperatura);
+          final livello = accentoLivello(a.airQuality.level);
+          return Padding(
+            padding: const EdgeInsets.only(top: 14),
+            child: Semantics(
+              button: true,
+              label: '${s.t('Aria nel parco', 'Air in the park')}: $titolo'
+                  '${temp == null ? '' : '. ${formattaValore(temp.value, mTemp, s)}'}',
+              excludeSemantics: true,
+              child: Premibile(
+                onTap: onAria,
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: .15),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.white.withValues(alpha: .22)),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 10,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: aggiornata ? livello.base : Colors.white54,
+                          border: Border.all(color: Colors.white, width: 1.5),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              titolo,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 15.5, fontWeight: FontWeight.w800, color: Colors.white),
+                            ),
+                            Text(
+                              s.t('Aria nel parco · ${quandoLettura(st.lastSeen, s)}', 'Park air · ${quandoLettura(st.lastSeen, s)}'),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(fontSize: 12.5, color: Colors.white.withValues(alpha: .8)),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (temp?.value case final valore?) ...[
+                        const SizedBox(width: 8),
+                        const Icon(Icons.thermostat_rounded, size: 20, color: Colors.white),
+                        TweenAnimationBuilder<double>(
+                          tween: Tween(begin: valore - 6, end: valore),
+                          duration: durata(context, 900),
+                          curve: Curves.easeOutCubic,
+                          builder: (context, v, _) => Text(
+                            formattaValore(v, mTemp, s),
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.white,
+                              fontFeatures: [FontFeature.tabularFigures()],
+                            ),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(width: 2),
+                      const Icon(Icons.chevron_right_rounded, color: Colors.white),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      );
+}
+
+/// Icona del momento della giornata che oscilla piano, come appesa.
+class _IconaOscillante extends StatefulWidget {
+  final IconData icona;
+  const _IconaOscillante({required this.icona});
+
+  @override
+  State<_IconaOscillante> createState() => _IconaOscillanteState();
+}
+
+class _IconaOscillanteState extends State<_IconaOscillante> with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(seconds: 3));
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.of(context).disableAnimations) {
+      _c.stop();
+    } else if (!_c.isAnimating) {
+      _c.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => ExcludeSemantics(
+        child: RotationTransition(
+          turns: Tween<double>(begin: -.03, end: .03).animate(CurvedAnimation(parent: _c, curve: Curves.easeInOut)),
+          child: Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(color: Colors.white.withValues(alpha: .16), shape: BoxShape.circle),
+            child: Icon(widget.icona, color: const Color(0xFFFFE08A), size: 24),
+          ),
+        ),
+      );
+}
+
+/// Scorciatoia della Home: icona e una o due parole.
 class _ScorciatoiaHome extends StatelessWidget {
   final IconData icona;
   final String etichetta;
   final Accento accento;
   final VoidCallback? onTap;
-  final bool piena;
 
   const _ScorciatoiaHome({
     required this.icona,
     required this.etichetta,
     required this.accento,
     required this.onTap,
-    this.piena = false,
   });
 
   @override
-  Widget build(BuildContext context) {
-    final raggio = BorderRadius.circular(20);
-    return Semantics(
-      button: true,
-      label: etichetta,
-      onTap: onTap,
-      excludeSemantics: true,
-      child: Material(
-        color: piena ? accento.base : accento.tinta,
-        shape: RoundedRectangleBorder(
-          borderRadius: raggio,
-          side: piena ? BorderSide.none : BorderSide(color: accento.base.withValues(alpha: .22)),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
+  Widget build(BuildContext context) => Semantics(
+        button: true,
+        label: etichetta,
+        onTap: onTap,
+        excludeSemantics: true,
+        child: Premibile(
           onTap: onTap,
-          child: SizedBox(
-            height: 78,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(icona, size: 26, color: piena ? Colors.white : accento.forte),
-                  const SizedBox(height: 6),
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      etichetta,
-                      maxLines: 1,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                        color: piena ? Colors.white : accento.forte,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+          child: Container(
+            height: 84,
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            decoration: BoxDecoration(
+              color: accento.tinta,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: accento.base.withValues(alpha: .22)),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icona, size: 26, color: accento.forte),
+                const SizedBox(height: 5),
+                Text(
+                  etichetta,
+                  maxLines: 2,
+                  textAlign: TextAlign.center,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12.5, height: 1.15, fontWeight: FontWeight.w800, color: accento.forte),
+                ),
+              ],
             ),
           ),
         ),
-      ),
-    );
-  }
+      );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1147,7 +1635,7 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
         context: context,
         barrierDismissible: false,
         builder: (dialogContext) => AlertDialog(
-          icon: const CircleAvatar(radius: 34, backgroundColor: menta, child: Icon(Icons.check_rounded, color: foresta, size: 40)),
+          icon: CircleAvatar(radius: 34, backgroundColor: menta, child: Icon(Icons.check_rounded, color: foresta, size: 40)),
           title: Text(s.t('Segnalazione inviata', 'Report submitted')),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1155,7 +1643,7 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
               Text(
                 s.t('Grazie! Il tuo aiuto rende il parco un posto migliore.', 'Thank you! Your help makes the park a better place.'),
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: testoSecondario, height: 1.4),
+                style: TextStyle(color: testoSecondario, height: 1.4),
               ),
               const SizedBox(height: 16),
               Container(
@@ -1171,7 +1659,7 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
                     ),
                     if ((result['status_label'] ?? '').toString().isNotEmpty) ...[
                       const SizedBox(height: 4),
-                      Text('${result['status_label']}', style: const TextStyle(color: testoSecondario)),
+                      Text('${result['status_label']}', style: TextStyle(color: testoSecondario)),
                     ],
                   ],
                 ),
@@ -1304,9 +1792,9 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
   Widget _intestazionePassaggio(String titolo, String descrizione) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(titolo, style: const TextStyle(fontSize: 22, height: 1.2, fontWeight: FontWeight.w800, color: testo, letterSpacing: -.3)),
+          Text(titolo, style: TextStyle(fontSize: 22, height: 1.2, fontWeight: FontWeight.w800, color: testo, letterSpacing: -.3)),
           const SizedBox(height: 6),
-          Text(descrizione, style: const TextStyle(fontSize: 15, height: 1.45, color: testoSecondario)),
+          Text(descrizione, style: TextStyle(fontSize: 15, height: 1.45, color: testoSecondario)),
           const SizedBox(height: 18),
         ],
       );
@@ -1316,10 +1804,10 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(testoCampo, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: testo)),
+            Text(testoCampo, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: testo)),
             if (aiuto != null) ...[
               const SizedBox(height: 3),
-              Text(aiuto, style: const TextStyle(fontSize: 13, height: 1.4, color: testoSecondario)),
+              Text(aiuto, style: TextStyle(fontSize: 13, height: 1.4, color: testoSecondario)),
             ],
           ],
         ),
@@ -1532,7 +2020,7 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
         children: [
           IconaTonda(icona, colore: accento.forte, sfondo: accento.tinta, dimensione: 40),
           const SizedBox(width: 12),
-          Expanded(child: Text(titolo, style: const TextStyle(fontSize: 16.5, fontWeight: FontWeight.w800, color: testo))),
+          Expanded(child: Text(titolo, style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.w800, color: testo))),
           const SizedBox(width: 8),
           etichetta,
         ],
@@ -1596,7 +2084,7 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
               : _caricamentoGps
                   ? s.t('Sto cercando la tua posizione…', 'Finding your location…')
                   : s.t('Mettiti vicino al problema e tocca il pulsante qui sotto.', 'Stand near the problem and tap the button below.'),
-          style: const TextStyle(fontSize: 14, height: 1.4, color: testoSecondario),
+          style: TextStyle(fontSize: 14, height: 1.4, color: testoSecondario),
         ),
         AnimatedSize(
           duration: durata(context, 300),
@@ -1642,7 +2130,7 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
         Text(
           s.t('Aiuta a capire subito il problema. Inquadra solo quello, senza persone né targhe.',
               'It helps show the problem at a glance. Frame only the problem, without people or number plates.'),
-          style: const TextStyle(fontSize: 14, height: 1.4, color: testoSecondario),
+          style: TextStyle(fontSize: 14, height: 1.4, color: testoSecondario),
         ),
         const SizedBox(height: 14),
         AnimatedSwitcher(
@@ -1767,7 +2255,7 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
           const SizedBox(height: 8),
           Text(
             s.t('Demo: tocca la mappa per spostare il punto.', 'Demo: tap the map to move the pin.'),
-            style: const TextStyle(fontSize: 12.5, color: testoSecondario),
+            style: TextStyle(fontSize: 12.5, color: testoSecondario),
           ),
         ],
       ]),
@@ -1782,7 +2270,7 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
         IconaTonda(icona, colore: accento.forte, sfondo: accento.tinta, dimensione: 36),
         const SizedBox(width: 12),
         Expanded(
-          child: Text(titolo, style: const TextStyle(fontSize: 14, color: testoSecondario)),
+          child: Text(titolo, style: TextStyle(fontSize: 14, color: testoSecondario)),
         ),
         const SizedBox(width: 8),
         Flexible(
@@ -1790,7 +2278,7 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
           child: Text(
             valore,
             textAlign: TextAlign.end,
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: testo),
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: testo),
           ),
         ),
       ],
@@ -1834,7 +2322,7 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(s.t('La tua segnalazione', 'Your report'), style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: testo)),
+              Text(s.t('La tua segnalazione', 'Your report'), style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: testo)),
               const SizedBox(height: 14),
               _rigaRiepilogo(s.t('Categoria', 'Category'), s.t(categoria.nomeIt, categoria.nomeEn), categoria.icona, categoria.accento),
               const Divider(height: 22),
@@ -1863,9 +2351,9 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
               ),
               if (_descrizione.text.trim().isNotEmpty) ...[
                 const Divider(height: 22),
-                Text(s.t('Descrizione', 'Description'), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: testoSecondario)),
+                Text(s.t('Descrizione', 'Description'), style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: testoSecondario)),
                 const SizedBox(height: 5),
-                Text(_descrizione.text.trim(), style: const TextStyle(fontSize: 15, height: 1.45, color: testo)),
+                Text(_descrizione.text.trim(), style: TextStyle(fontSize: 15, height: 1.45, color: testo)),
               ],
             ],
           ),
@@ -2225,22 +2713,22 @@ class _SchermataIdeeState extends State<SchermataIdee> {
       coloreBordo: evidenziata ? soleScuro : idea.mine ? sole.withValues(alpha: .45) : null,
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const IconaTonda(Icons.lightbulb_rounded, colore: soleScuro, sfondo: soleChiaro, dimensione: 40),
+          IconaTonda(Icons.lightbulb_rounded, colore: soleScuro, sfondo: soleChiaro, dimensione: 40),
           const SizedBox(width: 12),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(idea.title, style: const TextStyle(fontSize: 16, height: 1.3, fontWeight: FontWeight.w800, color: testo)),
+            Text(idea.title, style: TextStyle(fontSize: 16, height: 1.3, fontWeight: FontWeight.w800, color: testo)),
             if (idea.description.isNotEmpty) ...[
               const SizedBox(height: 5),
-              Text(idea.description, style: const TextStyle(fontSize: 14, height: 1.45, color: testoSecondario)),
+              Text(idea.description, style: TextStyle(fontSize: 14, height: 1.45, color: testoSecondario)),
             ],
           ])),
         ]),
         const SizedBox(height: 14),
         Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, runSpacing: 8, children: [
           Row(mainAxisSize: MainAxisSize.min, children: [
-            const Icon(Icons.schedule_rounded, size: 15, color: testoTenue),
+            Icon(Icons.schedule_rounded, size: 15, color: testoTenue),
             const SizedBox(width: 5),
-            Text([idea.dateLabel, if (idea.categoryLabel != null) idea.categoryLabel!].join(' · '), style: const TextStyle(fontSize: 13, color: testoSecondario)),
+            Text([idea.dateLabel, if (idea.categoryLabel != null) idea.categoryLabel!].join(' · '), style: TextStyle(fontSize: 13, color: testoSecondario)),
           ]),
           Wrap(crossAxisAlignment: WrapCrossAlignment.center, spacing: 6, runSpacing: 6, children: [
             if (idea.mine) Etichetta(s.t('La tua idea', 'Your idea'), icona: Icons.person_rounded),
@@ -2349,7 +2837,7 @@ class _FoglioNuovaIdeaState extends State<_FoglioNuovaIdea> {
     final conferma = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        icon: const IconaTonda(Icons.lightbulb_rounded, colore: soleScuro, sfondo: soleChiaro, dimensione: 56),
+        icon: IconaTonda(Icons.lightbulb_rounded, colore: soleScuro, sfondo: soleChiaro, dimensione: 56),
         title: Text(s.t('Anteprima del suggerimento', 'Suggestion preview')),
         content: SingleChildScrollView(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
           Container(
@@ -2359,16 +2847,16 @@ class _FoglioNuovaIdeaState extends State<_FoglioNuovaIdea> {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(titolo, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, height: 1.3)),
               const SizedBox(height: 6),
-              Text(dettagli, style: const TextStyle(color: testoSecondario, height: 1.4)),
+              Text(dettagli, style: TextStyle(color: testoSecondario, height: 1.4)),
               const SizedBox(height: 10),
               Etichetta('${s.t('Argomento', 'Topic')}: ${_nomeCategoria(_categoria)}', colore: soleScuro, sfondo: soleChiaro),
             ]),
           ),
           const SizedBox(height: 12),
           Row(children: [
-            const Icon(Icons.public_rounded, size: 16, color: testoSecondario),
+            Icon(Icons.public_rounded, size: 16, color: testoSecondario),
             const SizedBox(width: 6),
-            Expanded(child: Text(s.t('Sarà visibile a tutti gli utenti dell’app.', 'It will be visible to all app users.'), style: const TextStyle(color: testoSecondario, fontSize: 13))),
+            Expanded(child: Text(s.t('Sarà visibile a tutti gli utenti dell’app.', 'It will be visible to all app users.'), style: TextStyle(color: testoSecondario, fontSize: 13))),
           ]),
         ])),
         actions: [
@@ -2408,12 +2896,12 @@ class _FoglioNuovaIdeaState extends State<_FoglioNuovaIdea> {
           padding: const EdgeInsets.fromLTRB(22, 0, 22, 22),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
             Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const IconaTonda(Icons.edit_note_rounded, colore: soleScuro, sfondo: soleChiaro, dimensione: 44),
+              IconaTonda(Icons.edit_note_rounded, colore: soleScuro, sfondo: soleChiaro, dimensione: 44),
               const SizedBox(width: 12),
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(s.t('La tua idea', 'Your idea'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: testo)),
+                Text(s.t('La tua idea', 'Your idea'), style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: testo)),
                 const SizedBox(height: 3),
-                Text(s.t('Raccontaci cosa migliorerebbe il parco.', 'Tell us what could make the park better.'), style: const TextStyle(fontSize: 14, height: 1.4, color: testoSecondario)),
+                Text(s.t('Raccontaci cosa migliorerebbe il parco.', 'Tell us what could make the park better.'), style: TextStyle(fontSize: 14, height: 1.4, color: testoSecondario)),
               ])),
             ]),
             const SizedBox(height: 18),
@@ -2421,7 +2909,7 @@ class _FoglioNuovaIdeaState extends State<_FoglioNuovaIdea> {
             const SizedBox(height: 10),
             TextField(controller: widget.dettagli, minLines: 3, maxLines: 4, maxLength: 870, textCapitalization: TextCapitalization.sentences, decoration: InputDecoration(labelText: s.t('Descrizione', 'Description'), hintText: s.t('Descrivi la tua idea in poche parole…', 'Describe your idea in a few words…'), helperText: s.t('Non inserire dati personali.', 'Do not include personal information.'), alignLabelWithHint: true)),
             const SizedBox(height: 14),
-            Text(s.t('Argomento', 'Topic'), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: testo)),
+            Text(s.t('Argomento', 'Topic'), style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: testo)),
             const SizedBox(height: 8),
             Wrap(spacing: 8, runSpacing: 8, children: [
               for (final c in widget.categorie)
@@ -2582,7 +3070,7 @@ class _SchermataAvvisiState extends State<SchermataAvvisi> {
     return Scheda(
       key: evidenziato ? _chiaveEvidenziata : null,
       padding: const EdgeInsets.all(16),
-      colore: evidenziato ? cieloChiaro : importante ? const Color(0xFFFFF7F5) : superficie,
+      colore: evidenziato ? cieloChiaro : importante ? (temaScuro ? Color.alphaBlend(corallo.withValues(alpha: .08), superficie) : const Color(0xFFFFF7F5)) : superficie,
       coloreBordo: evidenziato ? cieloScuro : importante ? corallo.withValues(alpha: .40) : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2601,7 +3089,7 @@ class _SchermataAvvisiState extends State<SchermataAvvisi> {
                     ),
                     if (avviso.data.isNotEmpty) ...[
                       const SizedBox(height: 2),
-                      Text(avviso.data, style: const TextStyle(fontSize: 12.5, color: testoSecondario)),
+                      Text(avviso.data, style: TextStyle(fontSize: 12.5, color: testoSecondario)),
                     ],
                   ],
                 ),
@@ -2612,13 +3100,13 @@ class _SchermataAvvisiState extends State<SchermataAvvisi> {
           const SizedBox(height: 12),
           Text(
             s.t(avviso.titoloIt, avviso.titoloEn),
-            style: const TextStyle(fontSize: 16.5, height: 1.3, fontWeight: FontWeight.w800, color: testo),
+            style: TextStyle(fontSize: 16.5, height: 1.3, fontWeight: FontWeight.w800, color: testo),
           ),
           if (s.t(avviso.descrizioneIt, avviso.descrizioneEn).isNotEmpty) ...[
             const SizedBox(height: 6),
             Text(
               s.t(avviso.descrizioneIt, avviso.descrizioneEn),
-              style: const TextStyle(fontSize: 14.5, height: 1.5, color: testoSecondario),
+              style: TextStyle(fontSize: 14.5, height: 1.5, color: testoSecondario),
             ),
           ],
         ],

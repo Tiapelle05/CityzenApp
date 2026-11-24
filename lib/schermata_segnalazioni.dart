@@ -292,7 +292,7 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
                         children: [
                           Text(
                             categoria.isNotEmpty ? categoria : codice,
-                            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: testo, height: 1.25),
+                            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: testo, height: 1.25),
                           ),
                           const SizedBox(height: 6),
                           Wrap(
@@ -312,7 +312,7 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
                       tooltip: s.t('Chiudi', 'Close'),
                       visualDensity: VisualDensity.compact,
                       onPressed: () => setState(() => _selezionata = null),
-                      icon: const Icon(Icons.close_rounded, color: testoSecondario),
+                      icon: Icon(Icons.close_rounded, color: testoSecondario),
                     ),
                   ],
                 ),
@@ -323,7 +323,7 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
                     children: [
                       if (testoDescr.isNotEmpty) ...[
                         const SizedBox(height: 10),
-                        Text(testoDescr, style: const TextStyle(fontSize: 14.5, color: testo, height: 1.45)),
+                        Text(testoDescr, style: TextStyle(fontSize: 14.5, color: testo, height: 1.45)),
                       ],
                       if (rating is int && rating > 0) ...[
                         const SizedBox(height: 8),
@@ -332,14 +332,14 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
                       const SizedBox(height: 10),
                       Row(
                         children: [
-                          const Icon(Icons.schedule_rounded, size: 15, color: testoTenue),
+                          Icon(Icons.schedule_rounded, size: 15, color: testoTenue),
                           const SizedBox(width: 5),
                           Expanded(
                             child: Text(
                               [formattaData(r['created_at'], ora: true), if (codice.isNotEmpty && categoria.isNotEmpty) codice]
                                   .join('  ·  '),
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 12.5, color: testoSecondario),
+                              style: TextStyle(fontSize: 12.5, color: testoSecondario),
                             ),
                           ),
                         ],
@@ -404,7 +404,7 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
                         categoria,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: testo),
+                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: testo),
                       ),
                     ),
                     if (r['is_mine'] == true && !_soloMie) ...[
@@ -419,7 +419,7 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
                     descr,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 13, color: testoSecondario),
+                    style: TextStyle(fontSize: 13, color: testoSecondario),
                   ),
                 ],
                 const SizedBox(height: 6),
@@ -429,7 +429,7 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
                       child: Etichetta(r['status_label']?.toString() ?? '', colore: coloreStato, puntino: true),
                     ),
                     const SizedBox(width: 8),
-                    Text(formattaData(r['created_at']), style: const TextStyle(fontSize: 12, color: testoTenue)),
+                    Text(formattaData(r['created_at']), style: TextStyle(fontSize: 12, color: testoTenue)),
                     if (senzaPosizione) ...[
                       const SizedBox(width: 6),
                       Icon(Icons.location_off_rounded, size: 14, color: testoTenue,
@@ -470,7 +470,7 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
             children: [
               Row(
                 children: [
-                  const IconaTonda(Icons.receipt_long_rounded, colore: cieloScuro, sfondo: cieloChiaro, dimensione: 48),
+                  IconaTonda(Icons.receipt_long_rounded, colore: cieloScuro, sfondo: cieloChiaro, dimensione: 48),
                   const SizedBox(width: 14),
                   Expanded(
                     child: Column(
@@ -519,7 +519,7 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
                             children: [
                               Text('${h['status']}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5)),
                               const SizedBox(height: 2),
-                              Text(formattaData(h['at'], ora: true), style: const TextStyle(fontSize: 12.5, color: testoSecondario)),
+                              Text(formattaData(h['at'], ora: true), style: TextStyle(fontSize: 12.5, color: testoSecondario)),
                               if (h['note'] != null) ...[
                                 const SizedBox(height: 4),
                                 Text('${h['note']}', style: const TextStyle(fontSize: 14, height: 1.4)),
@@ -734,7 +734,7 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
             padding: const EdgeInsets.fromLTRB(4, 20, 4, 10),
             child: Text(
               s.t('Altre segnalazioni', 'Other reports'),
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: testoSecondario),
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: testoSecondario),
             ),
           ),
       ],
@@ -796,7 +796,7 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
                           header: true,
                           child: Text(
                             _soloMie ? s.t('Le mie segnalazioni', 'My reports') : s.t('Segnalazioni', 'Reports'),
-                            style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: testo, letterSpacing: -.2),
+                            style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: testo, letterSpacing: -.2),
                           ),
                         ),
                       ),
@@ -805,7 +805,7 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
                       IconButton(
                         tooltip: s.t('Aggiorna', 'Refresh'),
                         onPressed: _caricamento ? null : () => _carica(),
-                        icon: const Icon(Icons.refresh_rounded, color: testoSecondario),
+                        icon: Icon(Icons.refresh_rounded, color: testoSecondario),
                       ),
                     ],
                   ),
@@ -816,12 +816,12 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Padding(
+                        Padding(
                           padding: EdgeInsets.only(top: 1),
                           child: Icon(Icons.info_outline_rounded, size: 15, color: testoTenue),
                         ),
                         const SizedBox(width: 6),
-                        Expanded(child: Text(nota, style: const TextStyle(fontSize: 12.5, color: testoSecondario, height: 1.35))),
+                        Expanded(child: Text(nota, style: TextStyle(fontSize: 12.5, color: testoSecondario, height: 1.35))),
                       ],
                     ),
                   ),

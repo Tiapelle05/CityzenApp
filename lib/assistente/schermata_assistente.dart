@@ -23,7 +23,7 @@ class TestoRisposta extends StatelessWidget {
   final String contenuto;
   const TestoRisposta(this.contenuto, {super.key});
 
-  static const _stile = TextStyle(fontSize: 15, height: 1.4, color: testo);
+  static TextStyle get _stile => TextStyle(fontSize: 15, height: 1.4, color: testo);
   static final _punto = RegExp(r'^\s*(?:[•\-*]|\d+[.)])\s+');
 
   @override
@@ -46,7 +46,7 @@ class TestoRisposta extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Padding(
+              Padding(
                 padding: EdgeInsets.only(left: 2, right: 8),
                 child: Text('•', style: TextStyle(fontSize: 15, height: 1.4, color: foresta, fontWeight: FontWeight.w900)),
               ),
@@ -306,7 +306,7 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
       padding: const EdgeInsets.fromLTRB(16, 4, 8, 8),
       child: Row(
         children: [
-          const ExcludeSemantics(
+          ExcludeSemantics(
             child: IconaTonda(Icons.park_rounded, colore: foresta, sfondo: menta, dimensione: 40),
           ),
           const SizedBox(width: 12),
@@ -317,13 +317,13 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text(
+                  Text(
                     nomeAssistente,
                     style: TextStyle(fontSize: 21, height: 1.15, fontWeight: FontWeight.w800, color: testo, letterSpacing: -.3),
                   ),
                   Text(
                     s.t('L’assistente del parco', 'Your park assistant'),
-                    style: const TextStyle(fontSize: 13, color: testoSecondario),
+                    style: TextStyle(fontSize: 13, color: testoSecondario),
                   ),
                 ],
               ),
@@ -361,22 +361,22 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(Icons.info_outline_rounded, size: 18, color: cieloScuro),
+              Icon(Icons.info_outline_rounded, size: 18, color: cieloScuro),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(disclaimer, style: const TextStyle(fontSize: 12.5, height: 1.35, color: testo)),
+                child: Text(disclaimer, style: TextStyle(fontSize: 12.5, height: 1.35, color: testo)),
               ),
             ],
           ),
           const SizedBox(height: 6),
           Row(
             children: [
-              const Icon(Icons.privacy_tip_outlined, size: 18, color: cieloScuro),
+              Icon(Icons.privacy_tip_outlined, size: 18, color: cieloScuro),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   s.t('Non scrivere dati personali nelle domande.', 'Do not write personal data in your questions.'),
-                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: cieloScuro),
+                  style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: cieloScuro),
                 ),
               ),
             ],
@@ -391,14 +391,14 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
       children: [
-        const Center(
+        Center(
           child: IconaTonda(Icons.park_rounded, colore: foresta, sfondo: menta, dimensione: 64),
         ),
         const SizedBox(height: 14),
         Text(
           s.t('Ciao, sono $nomeAssistente', 'Hi, I’m $nomeAssistente'),
           textAlign: TextAlign.center,
-          style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w900, color: testo),
+          style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900, color: testo),
         ),
         const SizedBox(height: 4),
         Text(
@@ -407,7 +407,7 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
             'Ask me about the park status, notices, your reports, ideas and the air.',
           ),
           textAlign: TextAlign.center,
-          style: const TextStyle(fontSize: 14, color: testoSecondario),
+          style: TextStyle(fontSize: 14, color: testoSecondario),
         ),
         const SizedBox(height: 20),
         Wrap(
@@ -417,7 +417,7 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
           children: [
             for (final (it, en) in _suggerite)
               ActionChip(
-                avatar: const Icon(Icons.chat_bubble_outline_rounded, size: 17, color: cieloScuro),
+                avatar: Icon(Icons.chat_bubble_outline_rounded, size: 17, color: cieloScuro),
                 label: Text(s.t(it, en)),
                 onPressed: _inAttesa ? null : () => _invia(s.t(it, en)),
               ),
@@ -453,7 +453,7 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
             children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   color: foresta,
                   borderRadius: BorderRadius.only(
                     topLeft: Radius.circular(18),
@@ -475,12 +475,12 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.error_outline_rounded, size: 16, color: coralloScuro),
+                      Icon(Icons.error_outline_rounded, size: 16, color: coralloScuro),
                       const SizedBox(width: 5),
                       Flexible(
                         child: Text(
                           m.errore!,
-                          style: const TextStyle(fontSize: 13, color: coralloScuro, fontWeight: FontWeight.w700),
+                          style: TextStyle(fontSize: 13, color: coralloScuro, fontWeight: FontWeight.w700),
                         ),
                       ),
                     ],
@@ -511,7 +511,7 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const ExcludeSemantics(
+              ExcludeSemantics(
                 child: IconaTonda(Icons.park_rounded, colore: foresta, sfondo: menta, dimensione: 32),
               ),
               const SizedBox(width: 8),
@@ -571,7 +571,7 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
         padding: const EdgeInsets.only(bottom: 12),
         child: Row(
           children: [
-            const IconaTonda(Icons.park_rounded, colore: foresta, sfondo: menta, dimensione: 32),
+            IconaTonda(Icons.park_rounded, colore: foresta, sfondo: menta, dimensione: 32),
             const SizedBox(width: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -587,7 +587,7 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
                   const SizedBox(width: 10),
                   Text(
                     s.t('sta scrivendo…', 'typing…'),
-                    style: const TextStyle(fontSize: 14, fontStyle: FontStyle.italic, color: testoSecondario),
+                    style: TextStyle(fontSize: 14, fontStyle: FontStyle.italic, color: testoSecondario),
                   ),
                 ],
               ),
@@ -604,7 +604,7 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
     final puoInviare = !_inAttesa && testo.isNotEmpty && testo.length <= LimitiAssistente.lunghezzaDomanda;
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: superficie,
         border: Border(top: BorderSide(color: bordo)),
       ),

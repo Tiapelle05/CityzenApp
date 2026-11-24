@@ -11,7 +11,7 @@ const Color aranciaScuro = Color(0xFF9A4A05);
 const Color aranciaChiaro = Color(0xFFFFEEDC);
 const Color rossoLivello = Color(0xFFD92D20);
 const Color rossoChiaro = Color(0xFFFDE4E1);
-const Color grigioChiaro = Color(0xFFEEF1EC);
+Color get grigioChiaro => temaScuro ? const Color(0xFF222C26) : const Color(0xFFEEF1EC);
 
 /// Colore di un livello (stessi colori dello stato del parco):
 /// verde, giallo, arancione, rosso; grigio se sconosciuto.
@@ -19,12 +19,12 @@ Accento accentoLivello(EnvLevel? l) => switch (l) {
   EnvLevel.good => Accento.verde,
   EnvLevel.moderate => Accento.giallo,
   EnvLevel.poor => const Accento(aranciaLivello, aranciaScuro, aranciaChiaro),
-  EnvLevel.bad => const Accento(rossoLivello, coralloScuro, rossoChiaro),
-  _ => const Accento(testoTenue, testoSecondario, grigioChiaro),
+  EnvLevel.bad => Accento(rossoLivello, coralloScuro, rossoChiaro),
+  _ => Accento(testoTenue, testoSecondario, grigioChiaro),
 };
 
 /// Accento grigio per dati non aggiornati.
-const Accento accentoSpento = Accento(testoTenue, testoSecondario, grigioChiaro);
+Accento get accentoSpento => Accento(testoTenue, testoSecondario, grigioChiaro);
 
 IconData iconaMetrica(String metric) => switch (metric) {
   Metriche.temperatura => Icons.thermostat_rounded,

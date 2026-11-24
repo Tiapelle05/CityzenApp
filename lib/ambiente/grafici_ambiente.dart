@@ -71,7 +71,8 @@ class GraficoSerie extends StatelessWidget {
   final EnvSeries serie;
   final EnvMetric? metrica;
   final Copie s;
-  final Color colore;
+  final Color? _colore;
+  Color get colore => _colore ?? foresta;
   final double altezza;
 
   const GraficoSerie({
@@ -79,9 +80,9 @@ class GraficoSerie extends StatelessWidget {
     required this.serie,
     required this.metrica,
     required this.s,
-    this.colore = foresta,
+    Color? colore,
     this.altezza = 260,
-  });
+  }) : _colore = colore;
 
   /// Minuti "da orologio locale": le etichette cadono su ore tonde del telefono.
   static double _x(DateTime t) => (t.millisecondsSinceEpoch + t.toLocal().timeZoneOffset.inMilliseconds) / 60000;
@@ -135,7 +136,7 @@ class GraficoSerie extends StatelessWidget {
         child: Center(
           child: Text(
             s.t('Nessun dato in questo periodo.', 'No data in this period.'),
-            style: const TextStyle(color: testoSecondario),
+            style: TextStyle(color: testoSecondario),
           ),
         ),
       );
@@ -161,7 +162,7 @@ class GraficoSerie extends StatelessWidget {
     final decimali = metrica?.decimals ?? 1;
 
     final banda = colore.withValues(alpha: .14);
-    final stileAsse = const TextStyle(fontSize: 11, color: testoSecondario, fontWeight: FontWeight.w600);
+    final stileAsse = TextStyle(fontSize: 11, color: testoSecondario, fontWeight: FontWeight.w600);
 
     return SizedBox(
       height: altezza,
@@ -174,7 +175,7 @@ class GraficoSerie extends StatelessWidget {
           clipData: const FlClipData.all(),
           gridData: FlGridData(
             drawVerticalLine: false,
-            getDrawingHorizontalLine: (_) => const FlLine(color: bordo, strokeWidth: 1),
+            getDrawingHorizontalLine: (_) => FlLine(color: bordo, strokeWidth: 1),
           ),
           borderData: FlBorderData(show: false),
           titlesData: FlTitlesData(

@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show SystemUiOverlayStyle;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Palette
@@ -8,48 +9,86 @@ import 'package:flutter/material.dart';
 // i testi su fondo chiaro, le "Chiaro" per gli sfondi tenui.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const Color foresta = Color(0xFF17694A);
-const Color forestaScura = Color(0xFF0E4532);
+// I colori sono getter e non costanti: cambiano con il tema chiaro o scuro.
+// Il tema attivo si imposta con [impostaTemaScuro]; l'app poi si ricostruisce.
+
+bool _scuro = false;
+
+/// Vero se è attivo il tema scuro.
+bool get temaScuro => _scuro;
+
+/// Cambia la tavolozza. Chi la chiama deve poi ricostruire l'app
+/// (vedi [ricostruisciTutto]): i colori si rileggono a ogni build.
+void impostaTemaScuro(bool scuro) => _scuro = scuro;
+
+Color _t(int chiaro, int scuro) => Color(_scuro ? scuro : chiaro);
+
+Color get foresta => _t(0xFF17694A, 0xFF2E9E6B);
+Color get forestaScura => _t(0xFF0E4532, 0xFF8FDDB4);
 const Color foglia = Color(0xFF2FA36B);
-const Color menta = Color(0xFFE2F3E9);
+Color get menta => _t(0xFFE2F3E9, 0xFF183527);
 
 const Color sole = Color(0xFFF0A202);
-const Color soleScuro = Color(0xFF8F5B00);
-const Color soleChiaro = Color(0xFFFFF2D2);
+Color get soleScuro => _t(0xFF8F5B00, 0xFFF5C152);
+Color get soleChiaro => _t(0xFFFFF2D2, 0xFF362B10);
 
 const Color cielo = Color(0xFF2C7BE5);
-const Color cieloScuro = Color(0xFF1A5AAE);
-const Color cieloChiaro = Color(0xFFE5EFFC);
+Color get cieloScuro => _t(0xFF1A5AAE, 0xFF5B9BEF);
+Color get cieloChiaro => _t(0xFFE5EFFC, 0xFF15263D);
 
 const Color corallo = Color(0xFFE4572E);
-const Color coralloScuro = Color(0xFFB42318);
-const Color coralloChiaro = Color(0xFFFDEBE6);
+Color get coralloScuro => _t(0xFFB42318, 0xFFF0715A);
+Color get coralloChiaro => _t(0xFFFDEBE6, 0xFF3A1E17);
 
-const Color lavanda = Color(0xFF6E52D4);
-const Color lavandaChiaro = Color(0xFFEEEAFB);
+Color get lavanda => _t(0xFF6E52D4, 0xFF9C88F2);
+Color get lavandaChiaro => _t(0xFFEEEAFB, 0xFF262040);
 
-const Color sfondo = Color(0xFFF4F6F1);
-const Color superficie = Color(0xFFFFFFFF);
-const Color testo = Color(0xFF14231A);
-const Color testoSecondario = Color(0xFF5B6B60);
-const Color testoTenue = Color(0xFF8A988E);
-const Color bordo = Color(0xFFE1E8DD);
-const Color bordoForte = Color(0xFFC9D6C6);
+Color get sfondo => _t(0xFFF4F6F1, 0xFF0E1511);
+Color get superficie => _t(0xFFFFFFFF, 0xFF18221C);
+/// Superficie leggermente più chiara (scuro) o più scura (chiaro) per i rilievi.
+Color get superficieAlta => _t(0xFFF8FAF6, 0xFF212D26);
+Color get testo => _t(0xFF14231A, 0xFFE6EEE8);
+Color get testoSecondario => _t(0xFF5B6B60, 0xFFA7B6AC);
+Color get testoTenue => _t(0xFF8A988E, 0xFF75857B);
+Color get bordo => _t(0xFFE1E8DD, 0xFF27342C);
+Color get bordoForte => _t(0xFFC9D6C6, 0xFF3B4B41);
+/// Ombra delle schede: quasi invisibile al buio, dove contano i bordi.
+Color get ombra => _t(0x0D12261B, 0x40000000);
 
 /// Terna di colori di un accento: [base] per decorazioni, [forte] per testi e
 /// icone su fondo chiaro, [tinta] per gli sfondi tenui.
+/// Al buio [forte] diventa più luminoso e [tinta] un velo del colore base.
 class Accento {
   final Color base;
-  final Color forte;
-  final Color tinta;
-  const Accento(this.base, this.forte, this.tinta);
+  final Color _forte;
+  final Color _tinta;
+  const Accento(this.base, this._forte, this._tinta);
 
-  static const verde = Accento(foglia, foresta, menta);
-  static const arancio = Accento(corallo, coralloScuro, coralloChiaro);
-  static const blu = Accento(cielo, cieloScuro, cieloChiaro);
-  static const giallo = Accento(sole, soleScuro, soleChiaro);
-  static const viola = Accento(lavanda, lavanda, lavandaChiaro);
+  Color get forte {
+    if (!_scuro) return _forte;
+    final hsl = HSLColor.fromColor(_forte);
+    return hsl.lightness >= .68 ? _forte : hsl.withLightness(.7).toColor();
+  }
+
+  Color get tinta => _scuro ? Color.alphaBlend(base.withValues(alpha: .2), superficie) : _tinta;
+
+  static const verde = Accento(foglia, Color(0xFF17694A), Color(0xFFE2F3E9));
+  static const arancio = Accento(corallo, Color(0xFFB42318), Color(0xFFFDEBE6));
+  static const blu = Accento(cielo, Color(0xFF1A5AAE), Color(0xFFE5EFFC));
+  static const giallo = Accento(sole, Color(0xFF8F5B00), Color(0xFFFFF2D2));
+  static const viola = Accento(Color(0xFF6E52D4), Color(0xFF6E52D4), Color(0xFFEEEAFB));
   static const acqua = Accento(Color(0xFF14A3A3), Color(0xFF0B6E6E), Color(0xFFDDF4F2));
+}
+
+/// Ricostruisce tutti i widget montati, mantenendone lo stato: serve dopo il
+/// cambio di tema, perché i colori sono letti dai getter durante il build.
+void ricostruisciTutto(BuildContext context) {
+  void segna(Element e) {
+    e.markNeedsBuild();
+    e.visitChildren(segna);
+  }
+
+  (context as Element).visitChildren(segna);
 }
 
 /// Durata delle animazioni, azzerata se l'utente le disattiva.
@@ -79,28 +118,38 @@ ThemeData temaTryees() {
     materialTapTargetSize: MaterialTapTargetSize.padded,
     visualDensity: VisualDensity.standard,
     splashFactory: InkSparkle.splashFactory,
+    brightness: _scuro ? Brightness.dark : Brightness.light,
     colorScheme: ColorScheme.fromSeed(
       seedColor: foresta,
+      brightness: _scuro ? Brightness.dark : Brightness.light,
       primary: foresta,
+      onPrimary: Colors.white,
       secondary: foglia,
       surface: superficie,
+      onSurface: testo,
+      onSurfaceVariant: testoSecondario,
+      surfaceContainerHighest: superficieAlta,
+      outline: bordoForte,
+      outlineVariant: bordo,
       error: coralloScuro,
     ),
-    textTheme: ThemeData.light().textTheme.apply(bodyColor: testo, displayColor: testo),
+    textTheme: (_scuro ? ThemeData.dark() : ThemeData.light()).textTheme.apply(bodyColor: testo, displayColor: testo),
+    iconTheme: IconThemeData(color: testo),
     scaffoldBackgroundColor: sfondo,
     pageTransitionsTheme: const PageTransitionsTheme(builders: {
       TargetPlatform.android: FadeForwardsPageTransitionsBuilder(),
       TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
     }),
-    appBarTheme: const AppBarTheme(
+    appBarTheme: AppBarTheme(
       backgroundColor: sfondo,
       surfaceTintColor: Colors.transparent,
       foregroundColor: testo,
       elevation: 0,
       scrolledUnderElevation: 0,
       centerTitle: false,
+      systemOverlayStyle: _scuro ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
     ),
-    navigationBarTheme: const NavigationBarThemeData(
+    navigationBarTheme: NavigationBarThemeData(
       backgroundColor: superficie,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
@@ -118,7 +167,7 @@ ThemeData temaTryees() {
       style: OutlinedButton.styleFrom(
         minimumSize: const Size(0, 50),
         foregroundColor: foresta,
-        side: const BorderSide(color: bordoForte, width: 1.4),
+        side: BorderSide(color: bordoForte, width: 1.4),
         shape: forma,
         textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
       ),
@@ -135,7 +184,7 @@ ThemeData temaTryees() {
         foregroundColor: testoSecondario,
         selectedBackgroundColor: foresta,
         selectedForegroundColor: Colors.white,
-        side: const BorderSide(color: bordo, width: 1.2),
+        side: BorderSide(color: bordo, width: 1.2),
         minimumSize: const Size(0, 48),
         textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
       ),
@@ -143,18 +192,18 @@ ThemeData temaTryees() {
     chipTheme: ChipThemeData(
       backgroundColor: superficie,
       selectedColor: menta,
-      side: const BorderSide(color: bordo),
+      side: BorderSide(color: bordo),
       shape: const StadiumBorder(),
-      labelStyle: const TextStyle(fontWeight: FontWeight.w700, color: testo),
+      labelStyle: TextStyle(fontWeight: FontWeight.w700, color: testo),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
     ),
-    cardTheme: const CardThemeData(color: superficie, surfaceTintColor: Colors.transparent),
+    cardTheme: CardThemeData(color: superficie, surfaceTintColor: Colors.transparent),
     dialogTheme: DialogThemeData(
       backgroundColor: superficie,
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
     ),
-    bottomSheetTheme: const BottomSheetThemeData(
+    bottomSheetTheme: BottomSheetThemeData(
       backgroundColor: superficie,
       surfaceTintColor: Colors.transparent,
       showDragHandle: true,
@@ -166,14 +215,14 @@ ThemeData temaTryees() {
       contentTextStyle: const TextStyle(color: Colors.white, fontSize: 14),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
     ),
-    progressIndicatorTheme: const ProgressIndicatorThemeData(color: foresta),
-    dividerTheme: const DividerThemeData(color: bordo, thickness: 1),
+    progressIndicatorTheme: ProgressIndicatorThemeData(color: foresta),
+    dividerTheme: DividerThemeData(color: bordo, thickness: 1),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: superficie,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
-      labelStyle: const TextStyle(fontSize: 14, color: testoSecondario),
-      hintStyle: const TextStyle(fontSize: 14, color: testoTenue),
+      labelStyle: TextStyle(fontSize: 14, color: testoSecondario),
+      hintStyle: TextStyle(fontSize: 14, color: testoTenue),
       border: campo(bordoForte, 1.2),
       enabledBorder: campo(bordoForte, 1.2),
       focusedBorder: campo(foresta, 2),
@@ -238,6 +287,41 @@ class Appare extends StatelessWidget {
   }
 }
 
+/// Si rimpicciolisce un poco mentre lo si preme e torna con un piccolo
+/// rimbalzo: dà un riscontro "fisico" a schede e pulsanti.
+class Premibile extends StatefulWidget {
+  final Widget child;
+  final VoidCallback? onTap;
+  final double scala;
+  const Premibile({super.key, required this.child, this.onTap, this.scala = .95});
+
+  @override
+  State<Premibile> createState() => _PremibileState();
+}
+
+class _PremibileState extends State<Premibile> {
+  bool _premuto = false;
+
+  void _premi(bool v) {
+    if (widget.onTap != null && v != _premuto) setState(() => _premuto = v);
+  }
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => _premi(true),
+        onTapUp: (_) => _premi(false),
+        onTapCancel: () => _premi(false),
+        onTap: widget.onTap,
+        child: AnimatedScale(
+          scale: _premuto ? widget.scala : 1,
+          duration: durata(context, _premuto ? 90 : 260),
+          curve: _premuto ? Curves.easeOut : Curves.easeOutBack,
+          child: widget.child,
+        ),
+      );
+}
+
 /// Intestazione di pagina compatta: icona colorata della sezione e titolo
 /// sulla stessa riga. [descrizione] è facoltativa e resta su una sola riga,
 /// così l'intestazione non ruba spazio al contenuto.
@@ -277,7 +361,7 @@ class TitoloPagina extends StatelessWidget {
                   children: [
                     Text(
                       titolo,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: testo,
                         fontSize: 23,
                         height: 1.15,
@@ -291,7 +375,7 @@ class TitoloPagina extends StatelessWidget {
                         descrizione!,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 13.5, color: testoSecondario),
+                        style: TextStyle(fontSize: 13.5, color: testoSecondario),
                       ),
                     ],
                   ],
@@ -321,7 +405,7 @@ class TitoloSezione extends StatelessWidget {
                 header: true,
                 child: Text(
                   titolo,
-                  style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: testo, letterSpacing: -.2),
+                  style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: testo, letterSpacing: -.2),
                 ),
               ),
             ),
@@ -334,10 +418,11 @@ class TitoloSezione extends StatelessWidget {
 /// Quadrato arrotondato colorato con icona.
 class IconaTonda extends StatelessWidget {
   final IconData icona;
-  final Color colore;
+  final Color? _colore;
+  Color get colore => _colore ?? foresta;
   final Color? sfondo;
   final double dimensione;
-  const IconaTonda(this.icona, {super.key, this.colore = foresta, this.sfondo, this.dimensione = 44});
+  const IconaTonda(this.icona, {super.key, Color? colore, this.sfondo, this.dimensione = 44}) : _colore = colore;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -356,7 +441,8 @@ class IconaTonda extends StatelessWidget {
 class Scheda extends StatelessWidget {
   final Widget child;
   final EdgeInsets padding;
-  final Color colore;
+  final Color? _colore;
+  Color get colore => _colore ?? superficie;
   final Color? coloreBordo;
   final VoidCallback? onTap;
 
@@ -364,10 +450,10 @@ class Scheda extends StatelessWidget {
     super.key,
     required this.child,
     this.padding = const EdgeInsets.all(18),
-    this.colore = superficie,
+    Color? colore,
     this.coloreBordo,
     this.onTap,
-  });
+  }) : _colore = colore;
 
   @override
   Widget build(BuildContext context) {
@@ -388,7 +474,7 @@ class Scheda extends StatelessWidget {
         shape: RoundedRectangleBorder(
           borderRadius: raggio,
           side: BorderSide(
-            color: alta ? Colors.black : coloreBordo ?? bordo,
+            color: alta ? testo : coloreBordo ?? bordo,
             width: alta ? 1.5 : 1,
           ),
         ),
@@ -401,7 +487,8 @@ class Scheda extends StatelessWidget {
 /// Piccola etichetta a pillola, con puntino o icona opzionali.
 class Etichetta extends StatelessWidget {
   final String testo;
-  final Color colore;
+  final Color? _colore;
+  Color get colore => _colore ?? foresta;
   final Color? sfondo;
   final IconData? icona;
   final bool puntino;
@@ -409,11 +496,11 @@ class Etichetta extends StatelessWidget {
   const Etichetta(
     this.testo, {
     super.key,
-    this.colore = foresta,
+    Color? colore,
     this.sfondo,
     this.icona,
     this.puntino = false,
-  });
+  }) : _colore = colore;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -468,7 +555,7 @@ class Riquadro extends StatelessWidget {
             Icon(icona, color: accento.forte, size: 21),
             const SizedBox(width: 11),
             Expanded(
-              child: Text(messaggio, style: const TextStyle(fontSize: 13.5, height: 1.45, color: testo)),
+              child: Text(messaggio, style: TextStyle(fontSize: 13.5, height: 1.45, color: testo)),
             ),
           ],
         ),
@@ -502,7 +589,7 @@ class StatoVuoto extends StatelessWidget {
             Text(
               messaggio,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 14.5, height: 1.45, color: testoSecondario),
+              style: TextStyle(fontSize: 14.5, height: 1.45, color: testoSecondario),
             ),
             if (onAzione != null && etichettaAzione != null) ...[
               const SizedBox(height: 14),
@@ -555,7 +642,7 @@ class _CaricamentoScheletroState extends State<CaricamentoScheletro> with Single
         alignment: Alignment.centerLeft,
         child: Container(
           height: altezza,
-          decoration: BoxDecoration(color: const Color(0xFFE6ECE3), borderRadius: BorderRadius.circular(8)),
+          decoration: BoxDecoration(color: bordo, borderRadius: BorderRadius.circular(8)),
         ),
       );
 
@@ -579,7 +666,7 @@ class _CaricamentoScheletroState extends State<CaricamentoScheletro> with Single
                             Container(
                               width: 40,
                               height: 40,
-                              decoration: BoxDecoration(color: const Color(0xFFE6ECE3), borderRadius: BorderRadius.circular(13)),
+                              decoration: BoxDecoration(color: bordo, borderRadius: BorderRadius.circular(13)),
                             ),
                             const SizedBox(width: 12),
                             Expanded(child: _barra(i.isEven ? .7 : .5, 14)),
@@ -603,7 +690,8 @@ class _CaricamentoScheletroState extends State<CaricamentoScheletro> with Single
 class PulsanteAzione extends StatelessWidget {
   final String testo;
   final IconData icona;
-  final Color colore;
+  final Color? _colore;
+  Color get colore => _colore ?? foresta;
   final VoidCallback? onPressed;
   final bool outlined;
 
@@ -611,10 +699,10 @@ class PulsanteAzione extends StatelessWidget {
     super.key,
     required this.testo,
     required this.icona,
-    this.colore = foresta,
+    Color? colore,
     this.onPressed,
     this.outlined = false,
-  });
+  }) : _colore = colore;
 
   @override
   Widget build(BuildContext context) {

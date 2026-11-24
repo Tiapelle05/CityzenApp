@@ -240,12 +240,12 @@ class _SchermataAmbienteState extends State<SchermataAmbiente> {
                       header: true,
                       child: Text(
                         testoAria(a.airQuality, s),
-                        style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900, color: testo),
+                        style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900, color: testo),
                       ),
                     ),
                     Text(
                       [st.name, if (st.zone != null && st.zone != st.name) st.zone!].join(' · '),
-                      style: const TextStyle(fontSize: 13.5, color: testoSecondario),
+                      style: TextStyle(fontSize: 13.5, color: testoSecondario),
                     ),
                   ],
                 ),
@@ -333,11 +333,11 @@ class _SchermataAmbienteState extends State<SchermataAmbiente> {
                 Expanded(
                   child: Text(
                     etichetta,
-                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: testo),
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: testo),
                   ),
                 ),
                 if (livello != null && livello.isNotEmpty) BadgeLivello(livello: st.fresh ? r.level : null, testo: livello),
-                const Icon(Icons.chevron_right_rounded, color: testoTenue),
+                Icon(Icons.chevron_right_rounded, color: testoTenue),
               ],
             ),
             const SizedBox(height: 10),
@@ -366,7 +366,7 @@ class _SchermataAmbienteState extends State<SchermataAmbiente> {
                             const SizedBox(width: 5),
                             Text(
                               unitaMostrata(m, s),
-                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: testoSecondario),
+                              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: testoSecondario),
                             ),
                           ],
                         ],
@@ -374,7 +374,7 @@ class _SchermataAmbienteState extends State<SchermataAmbiente> {
                       if (nota != null)
                         Text(
                           nota,
-                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: testoSecondario),
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: testoSecondario),
                         )
                       else
                         Row(
@@ -390,7 +390,7 @@ class _SchermataAmbienteState extends State<SchermataAmbiente> {
                             ),
                             const SizedBox(width: 3),
                             Flexible(
-                              child: Text(testoDelta, style: const TextStyle(fontSize: 12.5, color: testoSecondario)),
+                              child: Text(testoDelta, style: TextStyle(fontSize: 12.5, color: testoSecondario)),
                             ),
                           ],
                         ),
@@ -406,7 +406,7 @@ class _SchermataAmbienteState extends State<SchermataAmbiente> {
             ),
             if (minMax != null) ...[
               const SizedBox(height: 8),
-              Text(minMax, style: const TextStyle(fontSize: 12.5, color: testoSecondario)),
+              Text(minMax, style: TextStyle(fontSize: 12.5, color: testoSecondario)),
             ],
           ],
         ),
@@ -495,7 +495,7 @@ class _SchermataGraficoState extends State<SchermataGrafico> {
                 if (stazione != null)
                   Text(
                     '${stazione.name} · ${s.t('ora', 'now')} ${formattaValore(lettura?.value, m, s)}',
-                    style: const TextStyle(fontSize: 14, color: testoSecondario, fontWeight: FontWeight.w600),
+                    style: TextStyle(fontSize: 14, color: testoSecondario, fontWeight: FontWeight.w600),
                   ),
                 const SizedBox(height: 12),
                 SegmentedButton<String>(
@@ -563,7 +563,7 @@ class _SchermataGraficoState extends State<SchermataGrafico> {
               Text(
                 _errore!,
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: testoSecondario),
+                style: TextStyle(color: testoSecondario),
               ),
               const SizedBox(height: 12),
               FilledButton.tonalIcon(
@@ -598,9 +598,9 @@ class _SchermataGraficoState extends State<SchermataGrafico> {
         children: [
           Text(
             formattaValore(v, m, s),
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: testo),
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: testo),
           ),
-          Text(titolo, style: const TextStyle(fontSize: 12, color: testoSecondario)),
+          Text(titolo, style: TextStyle(fontSize: 12, color: testoSecondario)),
         ],
       ),
     );

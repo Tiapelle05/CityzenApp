@@ -76,6 +76,8 @@ class MappaParco extends StatelessWidget {
           urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
           userAgentPackageName: 'it.tryees.app',
           maxNativeZoom: 19,
+          // Al buio la cartina si abbassa di luminosità e perde un po' di saturazione.
+          tileBuilder: temaScuro ? (context, tile, _) => ColorFiltered(colorFilter: _filtroNotte, child: tile) : null,
         ),
         if (marcatori.isNotEmpty) MarkerLayer(markers: marcatori),
         ...livelli,
@@ -96,6 +98,14 @@ class MappaParco extends StatelessWidget {
   }
 }
 
+/// Matrice che scurisce e desatura le tessere della cartina nel tema scuro.
+const ColorFilter _filtroNotte = ColorFilter.matrix(<double>[
+  0.45, 0.12, 0.03, 0, 0, //
+  0.08, 0.50, 0.03, 0, 0, //
+  0.08, 0.12, 0.40, 0, 0, //
+  0, 0, 0, 1, 0,
+]);
+
 class _Attribuzione extends StatelessWidget {
   final Alignment allineamento;
   const _Attribuzione(this.allineamento);
@@ -107,8 +117,8 @@ class _Attribuzione extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.all(6),
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        decoration: BoxDecoration(color: Colors.white.withValues(alpha: .85), borderRadius: BorderRadius.circular(6)),
-        child: const Text('© OpenStreetMap contributors', style: TextStyle(fontSize: 10, color: testoSecondario)),
+        decoration: BoxDecoration(color: superficie.withValues(alpha: .85), borderRadius: BorderRadius.circular(6)),
+        child: Text('© OpenStreetMap contributors', style: TextStyle(fontSize: 10, color: testoSecondario)),
       ),
     );
   }
@@ -209,6 +219,8 @@ class LivelloGruppi<T> extends StatelessWidget {
 }
 
 /// Cerchio scuro con il numero di segnalazioni raggruppate.
+const Color _verdeGruppo = Color(0xFF0E4532);
+
 class SegnapostoGruppo extends StatelessWidget {
   final int quanti;
   final bool selezionato;
@@ -223,11 +235,11 @@ class SegnapostoGruppo extends StatelessWidget {
         height: lato,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: forestaScura,
+          color: _verdeGruppo,
           shape: BoxShape.circle,
           border: Border.all(color: selezionato ? sole : Colors.white, width: selezionato ? 4 : 3),
           boxShadow: [
-            BoxShadow(color: forestaScura.withValues(alpha: .25), spreadRadius: 5),
+            BoxShadow(color: _verdeGruppo.withValues(alpha: .25), spreadRadius: 5),
             BoxShadow(color: Colors.black.withValues(alpha: .25), blurRadius: 8, offset: const Offset(0, 3)),
           ],
         ),
@@ -440,9 +452,9 @@ class _AnteprimaMappaState extends State<AnteprimaMappa> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.place_rounded, size: 16, color: cieloScuro),
+                    Icon(Icons.place_rounded, size: 16, color: cieloScuro),
                     const SizedBox(width: 6),
-                    Text(riepilogo, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: testo)),
+                    Text(riepilogo, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: testo)),
                   ],
                 ),
               ),
