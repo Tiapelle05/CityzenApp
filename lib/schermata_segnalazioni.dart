@@ -53,15 +53,13 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
 
   final MapController _mappa = MapController();
   late final AnimatoreMappa _volo = AnimatoreMappa(_mappa, this);
-  final DraggableScrollableController _foglio = DraggableScrollableController();
-  ScrollController? _scrollFoglio;
-  double _altezza = 600;
+  /// Carosello delle segnalazioni in basso: scorrendo le schede la mappa segue.
+  final PageController _carosello = PageController(viewportFraction: .9);
 
   /// Spazio occupato in alto dalla barra dei filtri.
   static const double _altezzaFiltri = 58;
-  /// Altezza del pannello chiuso: maniglia e intestazione.
-  static const double _foglioMinimoPx = 96;
-  static const double _foglioIniziale = .40;
+  /// Spazio occupato in basso da carosello e pulsante dell'elenco.
+  static const double _ingombroBasso = 170;
 
   @override
   void initState() {
@@ -82,7 +80,7 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
     _live?.cancel();
     _debounce?.cancel();
     _volo.dispose();
-    _foglio.dispose();
+    _carosello.dispose();
     _mappa.dispose();
     super.dispose();
   }
@@ -148,17 +146,11 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
   List<Map<String, dynamic>> get _visibili =>
       _filtroStato == null ? _items : _items.where((r) => _statoDi(r) == _filtroStato).toList();
 
-  // ── Movimenti di mappa e pannello ─────────────────────────────────────────
+  // ── Movimenti di mappa e carosello ────────────────────────────────────────
 
   bool get _animazioni => !MediaQuery.of(context).disableAnimations;
 
-  /// Altezza in pixel che il pannello avrà dopo una selezione.
-  double get _foglioPx {
-    final attuale = _foglio.isAttached ? _foglio.pixels : 0.0;
-    return math.max(attuale, _foglioIniziale * _altezza);
-  }
-
-  /// Porta [p] nella parte di mappa visibile tra filtri e pannello.
+  /// Porta [p] nella parte di mappa visibile tra filtri e carosello.
   /// Senza [zoom] la mappa si muove solo se il punto è coperto.
   void _mostraSullaMappa(LatLng p, {double? zoom}) {
     final MapCamera cam;
@@ -167,10 +159,11 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
     } catch (_) {
       return; // mappa non ancora pronta
     }
-    final foglio = _foglioPx;
+    const foglio = _ingombroBasso;
+    final altezza = cam.nonRotatedSize.height;
     final schermo = cam.latLngToScreenOffset(p);
     final coperto = schermo.dy < _altezzaFiltri + 30 ||
-        schermo.dy > _altezza - foglio - 30 ||
+        schermo.dy > altezza - foglio - 30 ||
         schermo.dx < 24 ||
         schermo.dx > cam.nonRotatedSize.width - 24;
     if (zoom == null && !coperto) return;
@@ -179,19 +172,18 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
     _volo.vola(centro, z, animato: _animazioni);
   }
 
-  void _seleziona(Object? id, {bool avvicina = false}) {
+  /// Sceglie una segnalazione: il carosello va alla sua scheda (se la scelta
+  /// non arriva proprio dal carosello) e la mappa mostra il suo segnaposto.
+  void _seleziona(Object? id, {bool avvicina = false, bool muoviCarosello = true}) {
     setState(() => _selezionata = id);
     if (id == null) return;
-    final d = durata(context, 320);
-    if (_foglio.isAttached && _foglio.size < _foglioIniziale - .01) {
-      _foglio.animateTo(_foglioIniziale, duration: d == Duration.zero ? const Duration(milliseconds: 1) : d, curve: Curves.easeOutCubic);
-    }
-    final scroll = _scrollFoglio;
-    if (scroll != null && scroll.hasClients && scroll.offset > 0) {
-      if (_animazioni) {
-        scroll.animateTo(0, duration: d, curve: Curves.easeOutCubic);
+    final indice = _visibili.indexWhere((r) => r['id'] == id);
+    if (muoviCarosello && indice >= 0 && _carosello.hasClients && _carosello.page?.round() != indice) {
+      final d = durata(context, 320);
+      if (d == Duration.zero) {
+        _carosello.jumpToPage(indice);
       } else {
-        scroll.jumpTo(0);
+        _carosello.animateToPage(indice, duration: d, curve: Curves.easeOutCubic);
       }
     }
     final r = _items.where((e) => e['id'] == id).firstOrNull;
@@ -218,7 +210,7 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
     }
     final adatta = CameraFit.coordinates(
       coordinates: [for (final e in gruppo) e.$2],
-      padding: EdgeInsets.fromLTRB(56, _altezzaFiltri + 40, 56, _foglioPx + 40),
+      padding: const EdgeInsets.fromLTRB(56, _altezzaFiltri + 40, 56, _ingombroBasso + 40),
       maxZoom: MappaParco.zoomMassimo,
     ).fit(cam);
     final zoom = math.max(adatta.zoom, cam.zoom + 1).clamp(13, MappaParco.zoomMassimo).toDouble();
@@ -259,8 +251,8 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
 
   // ── Schede ────────────────────────────────────────────────────────────────
 
-  /// Scheda completa della segnalazione scelta.
-  Widget _scheda(Map<String, dynamic> r) {
+  /// Scheda completa della segnalazione, aperta toccando una scheda del carosello.
+  Widget _scheda(Map<String, dynamic> r, {required VoidCallback onChiudi}) {
     final s = widget.s;
     final testoDescr = (r['description'] ?? r['summary'] ?? '').toString();
     final foto = CitizenApi.instance.absoluteUrl(r['photo_url'] as String?);
@@ -311,7 +303,7 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
                     IconButton(
                       tooltip: s.t('Chiudi', 'Close'),
                       visualDensity: VisualDensity.compact,
-                      onPressed: () => setState(() => _selezionata = null),
+                      onPressed: onChiudi,
                       icon: const Icon(Icons.close_rounded, color: testoSecondario),
                     ),
                   ],
@@ -364,8 +356,9 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
     );
   }
 
-  /// Riga compatta dell'elenco: miniatura, categoria, descrizione e stato.
-  Widget _riga(Map<String, dynamic> r, {VoidCallback? onTap}) {
+  /// Riga compatta: miniatura, categoria, descrizione e stato. È la scheda del
+  /// carosello e la riga dell'elenco completo; [scelta] la evidenzia.
+  Widget _riga(Map<String, dynamic> r, {VoidCallback? onTap, bool scelta = false}) {
     final s = widget.s;
     final foto = immagineDa(CitizenApi.instance.absoluteUrl(r['photo_url'] as String?));
     final categoria = (r['category_label'] ?? r['category'] ?? r['code'] ?? '').toString();
@@ -375,7 +368,8 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
 
     return Scheda(
       padding: const EdgeInsets.all(10),
-      onTap: onTap ?? () => _seleziona(r['id'], avvicina: true),
+      coloreBordo: scelta ? Accento.blu.base : null,
+      onTap: onTap ?? () => _apriScheda(r),
       child: Row(
         children: [
           ClipRRect(
@@ -688,101 +682,51 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
     );
   }
 
-  // ── Pannello ──────────────────────────────────────────────────────────────
+  // ── Carosello ─────────────────────────────────────────────────────────────
 
-  List<Widget> _contenutoFoglio(Copie s) {
-    if (_caricamento) {
-      return [CaricamentoScheletro(numero: 2, etichetta: s.t('Caricamento delle segnalazioni', 'Loading reports'))];
-    }
-    if (_errore != null) {
-      return [
-        StatoVuoto(
-          icona: Icons.cloud_off_rounded,
-          messaggio: _errore!,
-          accento: Accento.arancio,
-          onAzione: _carica,
-          etichettaAzione: s.t('Riprova', 'Retry'),
-        ),
-      ];
-    }
-    final visibili = _visibili;
-    if (visibili.isEmpty) {
-      return [
-        StatoVuoto(
-          icona: Icons.inbox_outlined,
-          accento: Accento.blu,
-          messaggio: _filtroStato != null
-              ? s.t('Nessuna segnalazione con questo stato.', 'No reports with this status.')
-              : _soloMie
-                  ? s.t('Non hai ancora inviato segnalazioni.', 'You have not sent any reports yet.')
-                  : s.t('Nessuna segnalazione.', 'No reports.'),
-        ),
-      ];
-    }
-    final scelta = visibili.where((r) => r['id'] == _selezionata).firstOrNull;
-    final altre = [for (final r in visibili) if (r['id'] != _selezionata) r];
-    return [
-      if (scelta != null) ...[
-        KeyedSubtree(key: ValueKey('scelta-${scelta['id']}'), child: Appare(child: _scheda(scelta))),
-        if (altre.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(4, 20, 4, 10),
-            child: Text(
-              s.t('Altre segnalazioni', 'Other reports'),
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: testoSecondario),
-            ),
+  /// Dettaglio completo di una segnalazione in un foglio che si chiude con un
+  /// gesto: la mappa resta libera finché non serve.
+  Future<void> _apriScheda(Map<String, dynamic> r) async {
+    _seleziona(r['id']);
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: sfondo,
+      builder: (ctx) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * .85),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(margineLaterale, 0, margineLaterale, 20),
+            child: _scheda(r, onChiudi: () => Navigator.of(ctx).pop()),
           ),
-      ],
-      for (final r in altre)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: KeyedSubtree(key: ValueKey('riga-${r['id']}'), child: _riga(r)),
         ),
-    ];
+      ),
+    );
   }
 
-  /// Nota breve sotto l'intestazione del pannello, solo se serve.
-  String? _nota(Copie s, int conPosizione) {
-    if (_caricamento || _errore != null || _items.isEmpty) return null;
-    final senza = _visibili.length - conPosizione;
-    if (conPosizione == 0 && !_soloMie) {
-      return s.t('Le posizioni degli altri non sono pubbliche: scegli «Mie» per vedere le tue.',
-          'Other people’s locations are private: choose “Mine” to see yours.');
-    }
-    if (senza > 0) return s.t('$senza senza posizione, solo in elenco.', '$senza without location, list only.');
-    return null;
-  }
-
-  Widget _foglioScorrevole(Copie s, ScrollController scroll, int conPosizione) {
-    _scrollFoglio = scroll;
-    final nota = _nota(s, conPosizione);
-    final totale = _visibili.length;
-    return Align(
-      alignment: Alignment.topCenter,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 760),
-        child: DecoratedBox(
-          decoration: const BoxDecoration(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
-            boxShadow: [BoxShadow(color: Color(0x2E12261B), blurRadius: 24, offset: Offset(0, -4))],
-          ),
-          child: Material(
-            color: sfondo,
-            clipBehavior: Clip.antiAlias,
-            shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(26))),
-            child: _elencoPigro(
-              scroll,
-              [
-                Center(
-                  child: Container(
-                    margin: const EdgeInsets.only(top: 10, bottom: 8),
-                    width: 42,
-                    height: 5,
-                    decoration: BoxDecoration(color: bordoForte, borderRadius: BorderRadius.circular(3)),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.only(left: 4),
+  /// Elenco completo, aperto dal pulsante sopra il carosello.
+  Future<void> _apriElenco(Copie s) async {
+    final scelta = await showModalBottomSheet<Object>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: sfondo,
+      builder: (ctx) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: .7,
+        minChildSize: .4,
+        maxChildSize: .95,
+        builder: (ctx, scroll) {
+          final visibili = _visibili;
+          return ListView.builder(
+            controller: scroll,
+            padding: const EdgeInsets.fromLTRB(margineLaterale, 0, margineLaterale, 24),
+            itemCount: visibili.length + 1,
+            itemBuilder: (_, i) {
+              if (i == 0) {
+                return Padding(
+                  padding: const EdgeInsets.only(left: 4, bottom: 12),
                   child: Row(
                     children: [
                       Expanded(
@@ -794,49 +738,156 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
                           ),
                         ),
                       ),
-                      if (!_caricamento && _errore == null)
-                        Etichetta('$totale', colore: cieloScuro, sfondo: cieloChiaro),
-                      IconButton(
-                        tooltip: s.t('Aggiorna', 'Refresh'),
-                        onPressed: _caricamento ? null : () => _carica(),
-                        icon: const Icon(Icons.refresh_rounded, color: testoSecondario),
-                      ),
+                      Etichetta('${visibili.length}', colore: cieloScuro, sfondo: cieloChiaro),
                     ],
                   ),
+                );
+              }
+              final r = visibili[i - 1];
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _riga(r, scelta: r['id'] == _selezionata, onTap: () => Navigator.of(ctx).pop(r['id'])),
+              );
+            },
+          );
+        },
+      ),
+    );
+    if (scelta != null && mounted) _seleziona(scelta, avvicina: true);
+  }
+
+  /// Pulsante a pillola sopra il carosello: quante sono e apre l'elenco completo.
+  Widget _pulsanteElenco(Copie s, int totale) => Material(
+        color: superficie,
+        shape: const StadiumBorder(),
+        shadowColor: const Color(0x4012261B),
+        elevation: 3,
+        child: InkWell(
+          customBorder: const StadiumBorder(),
+          onTap: () => _apriElenco(s),
+          child: Container(
+            height: 38,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.view_list_rounded, size: 18, color: cieloScuro),
+                const SizedBox(width: 6),
+                Text(
+                  totale == 1 ? s.t('1 segnalazione', '1 report') : s.t('$totale segnalazioni', '$totale reports'),
+                  style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800, color: testo),
                 ),
-                if (nota != null)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(4, 0, 4, 4),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Padding(
-                          padding: EdgeInsets.only(top: 1),
-                          child: Icon(Icons.info_outline_rounded, size: 15, color: testoTenue),
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(child: Text(nota, style: const TextStyle(fontSize: 12.5, color: testoSecondario, height: 1.35))),
-                      ],
-                    ),
-                  ),
-                const SizedBox(height: 8),
-                ..._contenutoFoglio(s),
+                const SizedBox(width: 2),
+                const Icon(Icons.expand_less_rounded, size: 18, color: testoSecondario),
               ],
             ),
+          ),
+        ),
+      );
+
+  /// Avviso a pillola sotto i filtri quando la mappa è vuota per privacy.
+  Widget _notaPrivacy(Copie s) => Material(
+        color: superficie,
+        shape: const StadiumBorder(),
+        shadowColor: const Color(0x4012261B),
+        elevation: 3,
+        child: InkWell(
+          customBorder: const StadiumBorder(),
+          onTap: () {
+            setState(() {
+              _soloMie = true;
+              _selezionata = null;
+            });
+            unawaited(_carica());
+          },
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 14, 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.lock_outline_rounded, size: 16, color: testoSecondario),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text.rich(
+                    TextSpan(children: [
+                      TextSpan(text: s.t('Le posizioni degli altri sono private · ', 'Others’ locations are private · ')),
+                      TextSpan(
+                        text: s.t('Vedi le mie', 'See mine'),
+                        style: const TextStyle(color: foresta, fontWeight: FontWeight.w800),
+                      ),
+                    ]),
+                    style: const TextStyle(fontSize: 12.5, color: testoSecondario, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+  /// Contenuto del carosello: le schede, oppure caricamento, errore o vuoto.
+  Widget _caroselloSchede(Copie s) {
+    Widget unica(Widget figlio) => Padding(padding: const EdgeInsets.symmetric(horizontal: margineLaterale), child: figlio);
+    if (_caricamento) {
+      return unica(Scheda(
+        padding: const EdgeInsets.all(18),
+        child: Row(children: [
+          const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.4)),
+          const SizedBox(width: 12),
+          Text(s.t('Caricamento delle segnalazioni…', 'Loading reports…'), style: const TextStyle(color: testoSecondario)),
+        ]),
+      ));
+    }
+    if (_errore != null) {
+      return unica(Scheda(
+        padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
+        child: Row(children: [
+          const Icon(Icons.cloud_off_rounded, color: coralloScuro),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(_errore!, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13.5, color: testo)),
+          ),
+          TextButton(onPressed: _carica, child: Text(s.t('Riprova', 'Retry'))),
+        ]),
+      ));
+    }
+    final visibili = _visibili;
+    if (visibili.isEmpty) {
+      return unica(Scheda(
+        padding: const EdgeInsets.all(18),
+        child: Row(children: [
+          const Icon(Icons.inbox_outlined, color: testoSecondario),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              _filtroStato != null
+                  ? s.t('Nessuna segnalazione con questo stato.', 'No reports with this status.')
+                  : _soloMie
+                      ? s.t('Non hai ancora inviato segnalazioni.', 'You have not sent any reports yet.')
+                      : s.t('Nessuna segnalazione.', 'No reports.'),
+              style: const TextStyle(fontSize: 14, color: testoSecondario),
+            ),
+          ),
+        ]),
+      ));
+    }
+    return PageView.builder(
+      key: ValueKey('carosello-$_soloMie-$_filtroStato'),
+      controller: _carosello,
+      itemCount: visibili.length,
+      onPageChanged: (i) => _seleziona(visibili[i]['id'], muoviCarosello: false),
+      itemBuilder: (_, i) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 5),
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          child: KeyedSubtree(
+            key: ValueKey('riga-${visibili[i]['id']}'),
+            child: _riga(visibili[i], scelta: visibili[i]['id'] == _selezionata),
           ),
         ),
       ),
     );
   }
-
-  /// Elenco del pannello costruito solo per le voci visibili: con molte
-  /// segnalazioni non si impaginano schede che restano sotto il bordo.
-  Widget _elencoPigro(ScrollController scroll, List<Widget> voci) => ListView.builder(
-        controller: scroll,
-        padding: const EdgeInsets.fromLTRB(14, 0, 14, 28),
-        itemCount: voci.length,
-        itemBuilder: (_, i) => voci[i],
-      );
 
   @override
   Widget build(BuildContext context) {
@@ -845,62 +896,78 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
       for (final r in _visibili)
         if (MappaParco.puntoDi(r) case final punto?) (r, punto),
     ];
+    final mostraNota = !_caricamento && _errore == null && _items.isNotEmpty && conPosizione.isEmpty && !_soloMie;
+    // Altezza delle schede: segue la dimensione del testo scelta sul telefono.
+    final altezzaSchede = 40 + MediaQuery.textScalerOf(context).scale(66);
 
-    return LayoutBuilder(
-      builder: (context, vincoli) {
-        _altezza = vincoli.maxHeight;
-        final minimo = (_foglioMinimoPx / _altezza).clamp(.08, .3);
-        final massimo = ((_altezza - _altezzaFiltri) / _altezza).clamp(.5, 1.0);
-        final iniziale = _foglioIniziale.clamp(minimo, massimo);
-        final aggancio = minimo < iniziale && iniziale < massimo;
-
-        return Stack(
-          fit: StackFit.expand,
-          children: [
-            MappaParco(
-              altezza: null,
-              controller: _mappa,
-              centro: MappaParco.centroParco(conPosizione.map((e) => e.$2)),
-              margineAttribuzione: const EdgeInsets.only(top: _altezzaFiltri - 4),
-              allineamentoAttribuzione: Alignment.topRight,
-              onTocco: (_) {
-                if (_selezionata != null) setState(() => _selezionata = null);
-              },
-              livelli: [
-                LivelloGruppi<Map<String, dynamic>>(
-                  punti: conPosizione,
-                  scelto: (r) => r['id'] == _selezionata,
-                  etichettaGruppo: (n) => s.t('$n segnalazioni vicine, tocca per vederle', '$n nearby reports, tap to see them'),
-                  onGruppo: _apriGruppo,
-                  segnaposto: (r) => Semantics(
-                    button: true,
-                    label: '${r['category_label'] ?? r['code']}, ${r['status_label'] ?? ''}',
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () => _seleziona(r['id']),
-                      child: Segnaposto(
-                        icona: iconaCategoria(r['category'] as String?),
-                        colore: coloreStatoSegnalazione(r['status'] as String?),
-                        selezionato: r['id'] == _selezionata,
-                      ),
-                    ),
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        MappaParco(
+          altezza: null,
+          controller: _mappa,
+          centro: MappaParco.centroParco(conPosizione.map((e) => e.$2)),
+          margineAttribuzione: const EdgeInsets.only(top: _altezzaFiltri - 4),
+          allineamentoAttribuzione: Alignment.topRight,
+          onTocco: (_) {
+            if (_selezionata != null) setState(() => _selezionata = null);
+          },
+          livelli: [
+            LivelloGruppi<Map<String, dynamic>>(
+              punti: conPosizione,
+              scelto: (r) => r['id'] == _selezionata,
+              etichettaGruppo: (n) => s.t('$n segnalazioni vicine, tocca per vederle', '$n nearby reports, tap to see them'),
+              onGruppo: _apriGruppo,
+              segnaposto: (r) => Semantics(
+                button: true,
+                label: '${r['category_label'] ?? r['code']}, ${r['status_label'] ?? ''}',
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _seleziona(r['id']),
+                  child: Segnaposto(
+                    icona: iconaCategoria(r['category'] as String?),
+                    colore: coloreStatoSegnalazione(r['status'] as String?),
+                    selezionato: r['id'] == _selezionata,
                   ),
                 ),
-              ],
-            ),
-            Positioned(top: 0, left: 0, right: 0, child: _barraFiltri(s)),
-            DraggableScrollableSheet(
-              controller: _foglio,
-              minChildSize: minimo,
-              initialChildSize: iniziale,
-              maxChildSize: massimo,
-              snap: true,
-              snapSizes: aggancio ? [iniziale] : null,
-              builder: (context, scroll) => _foglioScorrevole(s, scroll, conPosizione.length),
+              ),
             ),
           ],
-        );
-      },
+        ),
+        Positioned(top: 0, left: 0, right: 0, child: _barraFiltri(s)),
+        if (mostraNota)
+          Positioned(
+            top: _altezzaFiltri + 2,
+            left: margineLaterale,
+            right: margineLaterale,
+            child: Align(alignment: Alignment.topLeft, child: _notaPrivacy(s)),
+          ),
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 12,
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 760),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (!_caricamento && _errore == null && _visibili.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(margineLaterale, 0, margineLaterale, 10),
+                      child: _pulsanteElenco(s, _visibili.length),
+                    ),
+                  SizedBox(
+                    height: altezzaSchede,
+                    child: _caroselloSchede(s),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

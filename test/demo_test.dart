@@ -13,7 +13,13 @@ void main() {
 
     await tester.pumpWidget(const ParkApp());
     await tester.pump(const Duration(seconds: 1));
-    expect(find.text('DEMO'), findsOneWidget);
+    // La modalità demo si vede nel menu laterale.
+    await tester.tap(find.byTooltip('Menu'));
+    await tester.pumpAndSettle();
+    expect(find.text('Modalità demo'), findsOneWidget);
+    expect(find.text('Passa a Server'), findsOneWidget);
+    Navigator.of(tester.element(find.text('Modalità demo'))).pop();
+    await tester.pumpAndSettle();
 
     // La scheda «Mappa» apre subito la mappa delle segnalazioni.
     await tester.tap(find.text('Mappa'));
@@ -26,7 +32,10 @@ void main() {
       greaterThan(0),
     );
 
-    // Il pannello sotto la mappa elenca le segnalazioni simulate.
+    // Sotto la mappa il carosello mostra le schede; il pulsante apre l'elenco completo.
+    expect(find.byType(PageView), findsOneWidget);
+    await tester.tap(find.textContaining('segnalazioni'));
+    await tester.pump(const Duration(seconds: 1));
     expect(find.text('Segnalazioni'), findsOneWidget);
     expect(find.text('Illuminazione'), findsWidgets);
   });
