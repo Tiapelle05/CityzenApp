@@ -22,7 +22,7 @@ void main() {
 
     expect(find.text('Collegati al server'), findsOneWidget);
     expect(find.text('Prova senza server (demo)'), findsOneWidget);
-    expect(find.byType(NavigationBar), findsNothing);
+    expect(find.byType(BarraSchede), findsNothing);
 
     // Indirizzo vuoto: messaggio chiaro, nessun tentativo di collegamento.
     await tester.tap(find.text('Collegati'));

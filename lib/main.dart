@@ -9,6 +9,7 @@ import 'ambiente/scheda_aria.dart';
 import 'ambiente/schermata_ambiente.dart';
 import 'ambiente/stato_ambiente.dart';
 import 'assistente/schermata_assistente.dart';
+import 'barra_schede.dart';
 import 'citizen_api.dart';
 import 'modelli/ambiente.dart';
 import 'mappa_parco.dart';
@@ -16,6 +17,7 @@ import 'schermata_accesso.dart';
 import 'schermata_segnalazioni.dart';
 import 'ui.dart';
 
+export 'barra_schede.dart' show BarraSchede, VoceBarra;
 export 'ui.dart';
 
 Future<void> main() async {
@@ -142,9 +144,19 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
     duration: const Duration(milliseconds: 320),
     value: 1,
   );
-  /// Curva del cambio scheda, creata una volta sola (non a ogni build).
-  late final Animation<double> _curvaTransizione =
-      _transizione.drive(CurveTween(curve: Curves.easeOutCubic));
+  /// Scheda che sta uscendo durante un cambio (null a riposo).
+  int? _uscente;
+
+  /// Cambio scheda «ad asse condiviso»: la pagina vecchia svanisce nel primo
+  /// terzo scivolando via, la nuova compare subito dopo arrivando dallo stesso
+  /// lato verso cui scorre l'indicatore della barra. Stessa durata e curva
+  /// della barra (vedi [durataCambioScheda]).
+  late final Animation<double> _movimento = _transizione.drive(CurveTween(curve: curvaCambioScheda));
+  late final Animation<double> _entrata =
+      _transizione.drive(CurveTween(curve: const Interval(.3, 1, curve: Curves.easeOut)));
+  late final Animation<double> _uscita = _transizione.drive(
+    Tween<double>(begin: 1, end: 0).chain(CurveTween(curve: const Interval(0, .3, curve: Curves.easeIn))),
+  );
 
   StreamSubscription<Map<String, dynamic>>? _live;
   /// Dati ambientali condivisi da Home, schermata Ambiente e assistente.
@@ -156,6 +168,10 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
   @override
   void initState() {
     super.initState();
+    // Finito il cambio, la pagina uscita esce anche dal disegno.
+    _transizione.addStatusListener((stato) {
+      if (stato == AnimationStatus.completed && _uscente != null && mounted) setState(() => _uscente = null);
+    });
     // Collegamento live attivo in tutta l'app, non solo nelle schede che lo usano:
     // un pericolo segnalato dal backend deve arrivare ovunque si trovi l'utente.
     CitizenApi.instance.connectLive();
@@ -318,12 +334,17 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
     if (indice != pAssistente) FocusManager.instance.primaryFocus?.unfocus();
     if (indice != _pagina) {
       HapticFeedback.selectionClick();
+      final d = durataCambioScheda(context, indice - _pagina);
       setState(() {
         _direzione = indice > _pagina ? 1 : -1;
+        _uscente = d == Duration.zero ? null : _pagina;
         _pagina = indice;
         _visitate.add(indice);
       });
-      if (!MediaQuery.of(context).disableAnimations) _transizione.forward(from: 0);
+      if (d != Duration.zero) {
+        _transizione.duration = d;
+        _transizione.forward(from: 0);
+      }
     }
     // GET periodico dei dati ambientali solo mentre Home o Aria sono visibili.
     final conAria = indice == pInizio || indice == pAria;
@@ -575,32 +596,58 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
         _ => SchermataAssistente(s: s, incorporata: true, onFonte: (ctx, fonte) => _apriFonte(ctx, fonte, s)),
       };
 
-  /// Le cinque schede: quelle mai aperte sono segnaposto vuoti; quelle nascoste
-  /// hanno le animazioni ferme (TickerMode) e un proprio livello di disegno.
+  /// Le cinque schede: quelle mai aperte sono segnaposto vuoti.
   List<Widget> _schede(Copie s) {
     final firma = (widget.inglese, _invii, _mappaMie);
     if (firma != _firmaPagine) {
       _firmaPagine = firma;
       _pagineCostruite.fillRange(0, _pagineCostruite.length, null);
     }
+    final arrivo = Tween<Offset>(begin: Offset(.06 * _direzione, 0), end: Offset.zero).animate(_movimento);
+    final partenza = Tween<Offset>(begin: Offset.zero, end: Offset(-.06 * _direzione, 0)).animate(_movimento);
     return [
       for (var i = 0; i < _pagineCostruite.length; i++)
-        if (!_visitate.contains(i))
-          const SizedBox.shrink()
-        else
-          TickerMode(
-            enabled: i == _pagina,
-            child: RepaintBoundary(child: _pagineCostruite[i] ??= _costruisciPagina(i, s)),
-          ),
+        _scheda(
+          i,
+          _visitate.contains(i) ? _pagineCostruite[i] ??= _costruisciPagina(i, s) : const SizedBox.shrink(),
+          arrivo,
+          partenza,
+        ),
     ];
+  }
+
+  /// Una scheda nella pila. La struttura dei widget è sempre la stessa e
+  /// cambiano solo i parametri, così ogni pagina conserva il suo stato.
+  /// Le schede nascoste non si disegnano, non ricevono tocchi né focus e hanno
+  /// le animazioni ferme; ognuna ha un proprio livello di disegno.
+  Widget _scheda(int i, Widget pagina, Animation<Offset> arrivo, Animation<Offset> partenza) {
+    final attiva = i == _pagina;
+    final uscente = i == _uscente;
+    return Offstage(
+      offstage: !attiva && !uscente,
+      child: TickerMode(
+        enabled: attiva,
+        child: IgnorePointer(
+          ignoring: !attiva,
+          child: ExcludeFocus(
+            excluding: !attiva,
+            child: FadeTransition(
+              opacity: attiva ? _entrata : uscente ? _uscita : kAlwaysCompleteAnimation,
+              child: SlideTransition(
+                position: attiva ? arrivo : uscente ? partenza : const AlwaysStoppedAnimation(Offset.zero),
+                child: RepaintBoundary(child: pagina),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final s = Copie(widget.inglese);
-    final accento = _accenti[_pagina];
     final pagine = _schede(s);
-    final curva = _curvaTransizione;
 
     return Scaffold(
       appBar: AppBar(
@@ -659,72 +706,45 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
       ),
       body: SafeArea(
         top: false,
-        child: FadeTransition(
-          opacity: curva,
-          child: SlideTransition(
-            position: Tween<Offset>(begin: Offset(.025 * _direzione, 0), end: Offset.zero).animate(curva),
-            child: IndexedStack(index: _pagina, children: pagine),
-          ),
-        ),
+        child: Stack(fit: StackFit.expand, children: pagine),
       ),
-      bottomNavigationBar: DecoratedBox(
-        decoration: const BoxDecoration(
-          color: superficie,
-          border: Border(top: BorderSide(color: bordo)),
-          boxShadow: [BoxShadow(color: Color(0x0F12261B), blurRadius: 20, offset: Offset(0, -4))],
-        ),
-        child: NavigationBarTheme(
-          // L'indicatore prende il colore della sezione aperta: si accende una sola scheda alla volta.
-          data: NavigationBarTheme.of(context).copyWith(
-            height: 72,
-            indicatorColor: accento.tinta,
-            labelTextStyle: WidgetStateProperty.resolveWith(
-              (stati) => TextStyle(
-                fontSize: 12,
-                fontWeight: stati.contains(WidgetState.selected) ? FontWeight.w800 : FontWeight.w600,
-                color: stati.contains(WidgetState.selected) ? accento.forte : testoSecondario,
-              ),
-            ),
-            iconTheme: WidgetStateProperty.resolveWith(
-              (stati) => IconThemeData(
-                size: 24,
-                color: stati.contains(WidgetState.selected) ? accento.forte : testoSecondario,
-              ),
-            ),
+      // Ogni voce ha il colore della sua sezione: l'indicatore lo porta con sé
+      // mentre scivola, così si accende una sola scheda alla volta.
+      bottomNavigationBar: BarraSchede(
+        indice: _pagina,
+        onScelta: _vaiA,
+        voci: [
+          VoceBarra(
+            icona: Icons.home_outlined,
+            iconaScelta: Icons.home_rounded,
+            etichetta: s.t('Home', 'Home'),
+            accento: _accenti[pInizio],
           ),
-          child: NavigationBar(
-            selectedIndex: _pagina,
-            onDestinationSelected: _vaiA,
-            labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-            destinations: [
-              NavigationDestination(
-                icon: const Icon(Icons.home_outlined),
-                selectedIcon: const Icon(Icons.home_rounded),
-                label: s.t('Home', 'Home'),
-              ),
-              NavigationDestination(
-                icon: const Icon(Icons.add_location_alt_outlined),
-                selectedIcon: const Icon(Icons.add_location_alt_rounded),
-                label: s.t('Segnala', 'Report'),
-              ),
-              NavigationDestination(
-                icon: const Icon(Icons.map_outlined),
-                selectedIcon: const Icon(Icons.map_rounded),
-                label: s.t('Mappa', 'Map'),
-              ),
-              NavigationDestination(
-                icon: const Icon(Icons.air_rounded),
-                selectedIcon: const Icon(Icons.air_rounded),
-                label: s.t('Aria', 'Air'),
-              ),
-              NavigationDestination(
-                icon: const Icon(Icons.forum_outlined),
-                selectedIcon: const Icon(Icons.forum_rounded),
-                label: nomeAssistente,
-              ),
-            ],
+          VoceBarra(
+            icona: Icons.add_location_alt_outlined,
+            iconaScelta: Icons.add_location_alt_rounded,
+            etichetta: s.t('Segnala', 'Report'),
+            accento: _accenti[pSegnala],
           ),
-        ),
+          VoceBarra(
+            icona: Icons.map_outlined,
+            iconaScelta: Icons.map_rounded,
+            etichetta: s.t('Mappa', 'Map'),
+            accento: _accenti[pMappa],
+          ),
+          VoceBarra(
+            icona: Icons.air_rounded,
+            iconaScelta: Icons.air_rounded,
+            etichetta: s.t('Aria', 'Air'),
+            accento: _accenti[pAria],
+          ),
+          VoceBarra(
+            icona: Icons.forum_outlined,
+            iconaScelta: Icons.forum_rounded,
+            etichetta: nomeAssistente,
+            accento: _accenti[pAssistente],
+          ),
+        ],
       ),
     );
   }
