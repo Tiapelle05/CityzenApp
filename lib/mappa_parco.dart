@@ -58,7 +58,9 @@ class MappaParco extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final mappa = FlutterMap(
+    // Livello di disegno a sé: trascinare il pannello o animare ciò che sta
+    // sopra la mappa non ridisegna le tile.
+    final mappa = RepaintBoundary(child: FlutterMap(
       mapController: controller,
       options: MapOptions(
         initialCenter: centro,
@@ -83,7 +85,7 @@ class MappaParco extends StatelessWidget {
         ...livelli,
         Padding(padding: margineAttribuzione, child: _Attribuzione(allineamentoAttribuzione)),
       ],
-    );
+    ));
     if (altezza == null) return ColoredBox(color: menta, child: mappa);
     return Container(
       height: altezza,
@@ -136,6 +138,11 @@ class LivelloGruppi<T> extends StatelessWidget {
   final bool Function(T dato)? scelto;
   final String Function(int quanti)? etichettaGruppo;
 
+  /// Identità di un elemento (per esempio l'id). Ogni segnaposto la tiene come
+  /// chiave: quando la scelta cambia e l'ordine di disegno si sposta, le
+  /// animazioni restano al loro segnaposto invece di passare a un vicino.
+  final Object? Function(T dato)? chiave;
+
   const LivelloGruppi({
     super.key,
     required this.punti,
@@ -143,7 +150,10 @@ class LivelloGruppi<T> extends StatelessWidget {
     this.onGruppo,
     this.scelto,
     this.etichettaGruppo,
+    this.chiave,
   });
+
+  Object? _chiaveDi(T dato) => chiave == null ? dato : chiave!(dato);
 
   /// Distanza minima in pixel sotto la quale due segnaposto si uniscono.
   static const double soglia = 46;
@@ -186,6 +196,7 @@ class LivelloGruppi<T> extends StatelessWidget {
         for (final g in gruppi)
           if (g.length == 1)
             Marker(
+              key: ValueKey(('uno', _chiaveDi(g.first.$1))),
               point: g.first.$2,
               width: Segnaposto.dimensione,
               height: Segnaposto.dimensione,
@@ -193,6 +204,7 @@ class LivelloGruppi<T> extends StatelessWidget {
             )
           else
             Marker(
+              key: ValueKey(('gruppo', g.map((e) => '${_chiaveDi(e.$1)}').join('|'))),
               point: LatLng(
                 g.map((e) => e.$2.latitude).reduce((a, b) => a + b) / g.length,
                 g.map((e) => e.$2.longitude).reduce((a, b) => a + b) / g.length,
@@ -245,7 +257,7 @@ class SegnapostoGruppo extends StatelessWidget {
         ),
         child: Text(
           quanti > 99 ? '99+' : '$quanti',
-          style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w900),
+          style: TextStyle(color: suAccento, fontSize: 15, fontWeight: FontWeight.w900),
         ),
       ),
     );
@@ -507,6 +519,7 @@ class _AnteprimaMappaState extends State<AnteprimaMappa> {
                 livelli: [
                   LivelloGruppi<Map<String, dynamic>>(
                     punti: punti,
+                    chiave: (r) => r['id'],
                     segnaposto: (r) => Segnaposto(
                       icona: iconaCategoria(r['category'] as String?),
                       colore: coloreStatoSegnalazione(r['status'] as String?),
@@ -551,10 +564,10 @@ class _AnteprimaMappaState extends State<AnteprimaMappa> {
                     children: [
                       Text(
                         s.t('Apri la mappa', 'Open the map'),
-                        style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: Colors.white),
+                        style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: suAccento),
                       ),
                       const SizedBox(width: 6),
-                      const Icon(Icons.arrow_forward_rounded, size: 17, color: Colors.white),
+                      Icon(Icons.arrow_forward_rounded, size: 17, color: suAccento),
                     ],
                   ),
                 ),

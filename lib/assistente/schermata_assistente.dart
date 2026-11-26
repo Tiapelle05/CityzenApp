@@ -6,10 +6,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 
+import '../ambiente/stato_ambiente.dart';
 import '../api/treeyes_api.dart';
 import '../citizen_api.dart';
 import '../modelli/ambiente.dart';
 import '../ui.dart';
+import 'nomi_fonti.dart';
 
 /// Nome dell'assistente del parco, mostrato nella barra in basso, nella Home e nella chat.
 const String nomeAssistente = 'Parky';
@@ -93,7 +95,10 @@ class SchermataAssistente extends StatefulWidget {
   /// Vero quando la chat è una scheda della barra in basso: niente AppBar propria.
   final bool incorporata;
 
-  const SchermataAssistente({super.key, required this.s, this.onFonte, this.incorporata = false});
+  /// Dati ambientali, per dare ai link dei grafici il nome della grandezza e della stazione.
+  final StatoAmbiente? ambiente;
+
+  const SchermataAssistente({super.key, required this.s, this.onFonte, this.incorporata = false, this.ambiente});
 
   @override
   State<SchermataAssistente> createState() => _SchermataAssistenteState();
@@ -106,6 +111,7 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
   final FocusNode _focus = FocusNode();
   bool _inAttesa = false;
   String? _disclaimer;
+  late final NomiFonti _nomi = NomiFonti(ambiente: widget.ambiente);
   /// Avvertenza completa aperta (di base resta su una riga).
   bool _avvertenzaAperta = false;
   /// Ultima risposta arrivata: il testo compare man mano, come scritto.
@@ -310,38 +316,18 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
   /// il pulsante per ricominciare.
   Widget _intestazione() {
     final s = widget.s;
+    // Stessa intestazione delle altre schede.
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 8, 8),
-      child: Row(
-        children: [
-          ExcludeSemantics(
-            child: IconaTonda(Icons.park_rounded, colore: foresta, sfondo: menta, dimensione: 40),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Semantics(
-              header: true,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    nomeAssistente,
-                    style: TextStyle(fontSize: 21, height: 1.15, fontWeight: FontWeight.w800, color: testo, letterSpacing: -.3),
-                  ),
-                  Text(
-                    s.t('L’assistente del parco', 'Your park assistant'),
-                    style: TextStyle(fontSize: 13, color: testoSecondario),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          AnimatedSwitcher(
-            duration: durata(context, 200),
-            child: _messaggi.isEmpty ? const SizedBox(key: ValueKey('vuoto')) : _pulsanteNuova(s),
-          ),
-        ],
+      padding: const EdgeInsets.symmetric(horizontal: margineLaterale),
+      child: TitoloPagina(
+        titolo: nomeAssistente,
+        descrizione: s.t('L’assistente del parco', 'Your park assistant'),
+        icona: Icons.park_rounded,
+        accento: Accento.viola, // il colore della sua voce nella barra
+        azione: AnimatedSwitcher(
+          duration: durata(context, 200),
+          child: _messaggi.isEmpty ? const SizedBox(key: ValueKey('vuoto')) : _pulsanteNuova(s),
+        ),
       ),
     );
   }
@@ -585,8 +571,7 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
                         spacing: 6,
                         runSpacing: 6,
                         children: [
-                          for (final f in m.fonti)
-                            if (_etichettaFonte(f, s) case final etichetta?)
+                          for (final (f, etichetta) in _nomi.etichette(m.fonti, s))
                               ActionChip(
                                 visualDensity: VisualDensity.compact,
                                 avatar: Icon(_iconaFonte(f.type), size: 16, color: foresta),
@@ -750,41 +735,6 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
     TipiFonte.ambiente => Icons.air_rounded,
     TipiFonte.categorie => Icons.add_location_alt_rounded,
     _ => Icons.link_rounded,
-  };
-
-  /// Lunghezza massima del titolo sul chip.
-  static const int _maxTitolo = 38;
-
-  static String _accorcia(String t) {
-    final pulito = t.trim().replaceAll(RegExp(r'\s+'), ' ');
-    return pulito.length <= _maxTitolo ? pulito : '${pulito.substring(0, _maxTitolo - 1).trimRight()}…';
-  }
-
-  /// Etichetta del chip; null per i tipi che l'app non sa aprire.
-  /// Avvisi, segnalazioni e idee mostrano il proprio titolo, così i link si distinguono.
-  static String? _etichettaFonte(AssistantSource f, Copie s) {
-    final titolo = f.title?.trim();
-    if (titolo != null && titolo.isNotEmpty && _conTitolo.contains(f.type)) return _accorcia(titolo);
-    return _etichettaGenerica(f, s);
-  }
-
-  static const Set<String> _conTitolo = {
-    TipiFonte.avviso,
-    TipiFonte.miaSegnalazione,
-    TipiFonte.segnalazione,
-    TipiFonte.idea,
-  };
-
-  static String? _etichettaGenerica(AssistantSource f, Copie s) => switch (f.type) {
-    TipiFonte.statoParco => s.t('Stato del parco', 'Park status'),
-    TipiFonte.avviso => f.id == null ? s.t('Avvisi', 'Notices') : s.t('Avviso n. ${f.id}', 'Notice #${f.id}'),
-    TipiFonte.miaSegnalazione =>
-      f.id == null ? s.t('Le tue segnalazioni', 'Your reports') : s.t('Tua segnalazione n. ${f.id}', 'Your report #${f.id}'),
-    TipiFonte.segnalazione => f.id == null ? s.t('Segnalazioni', 'Reports') : s.t('Segnalazione n. ${f.id}', 'Report #${f.id}'),
-    TipiFonte.idea => f.id == null ? s.t('Idee', 'Ideas') : s.t('Idea n. ${f.id}', 'Idea #${f.id}'),
-    TipiFonte.ambiente => f.metric == null ? s.t('Dati ambientali', 'Environmental data') : s.t('Grafico', 'Chart'),
-    TipiFonte.categorie => s.t('Segnala', 'Report'),
-    _ => null,
   };
 }
 

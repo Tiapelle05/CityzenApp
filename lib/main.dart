@@ -15,6 +15,7 @@ import 'assistente/schermata_assistente.dart';
 import 'citizen_api.dart';
 import 'modelli/ambiente.dart';
 import 'mappa_parco.dart';
+import 'menu_laterale.dart';
 import 'schermata_accesso.dart';
 import 'schermata_segnalazioni.dart';
 import 'ui.dart';
@@ -188,6 +189,8 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
   ];
 
   int _pagina = pInizio;
+  /// Schede già aperte: le altre non si costruiscono finché non servono.
+  final Set<int> _aperte = {pInizio};
   /// Verso del cambio scheda: 1 verso destra, -1 verso sinistra.
   int _direzione = 1;
   /// 0 = barra in alto piena, 1 = ridotta (si scorre verso il basso).
@@ -199,6 +202,8 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
   int _invii = 0;
   /// Avvisi attivi (per il pallino sulla campanella) e se almeno uno è importante.
   int _avvisiAttivi = 0;
+  /// Vero dopo il primo conteggio riuscito: prima il riquadro mostra un trattino.
+  bool _avvisiContati = false;
   bool _avvisiUrgenti = false;
   Timer? _debounceAvvisi;
   late final AnimationController _transizione = AnimationController(
@@ -264,6 +269,7 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
       if (!mounted) return;
       setState(() {
         _avvisiAttivi = avvisi.length;
+        _avvisiContati = true;
         _avvisiUrgenti = avvisi.any((a) => a['level'] == 'alert');
       });
     } catch (_) {
@@ -383,6 +389,7 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
       setState(() {
         _direzione = indice > _pagina ? 1 : -1;
         _pagina = indice;
+        _aperte.add(indice);
       });
       if (!MediaQuery.of(context).disableAnimations) _transizione.forward(from: 0);
       _testata.reverse();
@@ -447,132 +454,7 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
     }
   }
 
-  /// Pannello Impostazioni: lingua, tema e collegamento (demo o server).
-  Future<void> _apriImpostazioni() async {
-    var inglese = widget.inglese;
-    var modo = widget.modoTema;
-    final demo = widget.demo;
-    final server = CitizenApi.instance.baseUrl;
-    final cambia = await showModalBottomSheet<bool>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, aggiorna) {
-          final s = Copie(inglese);
-          Widget titolo(String t) => Padding(
-                padding: const EdgeInsets.only(top: 18, bottom: 8),
-                child: Text(
-                  t.toUpperCase(),
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: testoSecondario, letterSpacing: .9),
-                ),
-              );
-          return SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(22, 0, 22, 22),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(children: [
-                    IconaTonda(Icons.tune_rounded, colore: foresta, sfondo: menta, dimensione: 44),
-                    const SizedBox(width: 12),
-                    Text(
-                      s.t('Impostazioni', 'Settings'),
-                      style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900, color: testo, letterSpacing: -.3),
-                    ),
-                  ]),
-                  titolo(s.t('Lingua', 'Language')),
-                  SegmentedButton<bool>(
-                    showSelectedIcon: false,
-                    segments: const [
-                      ButtonSegment(value: false, label: Text('🇮🇹  Italiano')),
-                      ButtonSegment(value: true, label: Text('🇬🇧  English')),
-                    ],
-                    selected: {inglese},
-                    onSelectionChanged: (v) {
-                      aggiorna(() => inglese = v.first);
-                      widget.onLinguaCambiata(v.first);
-                    },
-                  ),
-                  titolo(s.t('Tema', 'Theme')),
-                  SegmentedButton<ModoTema>(
-                    showSelectedIcon: false,
-                    segments: [
-                      ButtonSegment(
-                        value: ModoTema.sistema,
-                        icon: const Icon(Icons.brightness_auto_rounded, size: 18),
-                        label: Text(s.t('Sistema', 'System')),
-                      ),
-                      ButtonSegment(
-                        value: ModoTema.chiaro,
-                        icon: const Icon(Icons.light_mode_rounded, size: 18),
-                        label: Text(s.t('Chiaro', 'Light')),
-                      ),
-                      ButtonSegment(
-                        value: ModoTema.scuro,
-                        icon: const Icon(Icons.dark_mode_rounded, size: 18),
-                        label: Text(s.t('Scuro', 'Dark')),
-                      ),
-                    ],
-                    selected: {modo},
-                    onSelectionChanged: (v) {
-                      aggiorna(() => modo = v.first);
-                      widget.onTemaCambiato?.call(v.first);
-                    },
-                  ),
-                  if (widget.onCambiaCollegamento != null) ...[
-                    titolo(s.t('Dati', 'Data')),
-                    SegmentedButton<bool>(
-                      showSelectedIcon: false,
-                      segments: [
-                        ButtonSegment(
-                          value: true,
-                          icon: const Icon(Icons.science_rounded, size: 18),
-                          label: Text(s.t('Demo', 'Demo')),
-                        ),
-                        ButtonSegment(
-                          value: false,
-                          icon: const Icon(Icons.cloud_done_rounded, size: 18),
-                          label: Text(s.t('Server', 'Server')),
-                        ),
-                      ],
-                      selected: {demo},
-                      onSelectionChanged: (v) {
-                        Navigator.of(ctx).pop(false);
-                        _cambiaProfilo(v.first);
-                      },
-                    ),
-                    const SizedBox(height: 10),
-                    Row(children: [
-                      Icon(demo ? Icons.info_outline_rounded : Icons.dns_rounded, size: 18, color: testoSecondario),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          demo ? s.t('Dati simulati, nulla viene inviato.', 'Simulated data, nothing is sent.') : server,
-                          style: TextStyle(fontSize: 13.5, color: testoSecondario),
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: () => Navigator.of(ctx).pop(true),
-                        child: Text(s.t('Cambia server', 'Change server')),
-                      ),
-                    ]),
-                  ],
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-    if (cambia == true) {
-      CitizenApi.instance.disconnectLive();
-      widget.onCambiaCollegamento?.call();
-    }
-  }
-
-  /// Pulsante tondo della barra in alto (tema, impostazioni, avvisi).
+  /// Pulsante tondo della barra in alto (avvisi).
   Widget _tondo({required String tooltip, required VoidCallback onPressed, required Widget icona}) => IconButton(
         tooltip: tooltip,
         onPressed: onPressed,
@@ -585,64 +467,6 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
         ),
         icon: icona,
       );
-
-  /// Piccolo segnale «DEMO» quando i dati sono simulati: un tocco apre le impostazioni.
-  Widget _badgeDemo(Copie s) {
-    if (!widget.demo && !_cambioProfilo) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(right: 6),
-      child: Semantics(
-        button: true,
-        label: s.t('Modalità demo, apri le impostazioni', 'Demo mode, open settings'),
-        excludeSemantics: true,
-        child: Material(
-          color: lavandaChiaro,
-          shape: StadiumBorder(side: BorderSide(color: lavanda.withValues(alpha: .35))),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: _apriImpostazioni,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                if (_cambioProfilo)
-                  SizedBox(width: 13, height: 13, child: CircularProgressIndicator(strokeWidth: 2, color: lavanda))
-                else
-                  Icon(Icons.science_rounded, size: 14, color: lavanda),
-                const SizedBox(width: 4),
-                Text('DEMO', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: lavanda, letterSpacing: .6)),
-              ]),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// Interruttore del tema: un tocco passa da chiaro a scuro e viceversa.
-  Widget _interruttoreTema(Copie s) {
-    final scuro = temaScuro;
-    return _tondo(
-      tooltip: scuro ? s.t('Passa al tema chiaro', 'Switch to light theme') : s.t('Passa al tema scuro', 'Switch to dark theme'),
-      onPressed: () {
-        HapticFeedback.selectionClick();
-        widget.onTemaCambiato?.call(scuro ? ModoTema.chiaro : ModoTema.scuro);
-      },
-      icona: AnimatedSwitcher(
-        duration: durata(context, 380),
-        switchInCurve: Curves.easeOutBack,
-        transitionBuilder: (figlio, a) => RotationTransition(
-          turns: Tween<double>(begin: -.35, end: 0).animate(a),
-          child: ScaleTransition(scale: a, child: FadeTransition(opacity: a, child: figlio)),
-        ),
-        child: Icon(
-          scuro ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-          key: ValueKey(scuro),
-          size: 20,
-          color: scuro ? sole : foresta,
-        ),
-      ),
-    );
-  }
 
   /// Campanella degli avvisi nella barra in alto, con il numero di quelli attivi
   /// (rosso se almeno uno è importante).
@@ -692,6 +516,7 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
         onAria: () => _vaiA(pAria),
         onIdee: () => _apriIdee(s),
         onAvvisi: () => _apriAvvisi(s),
+        avvisiAttivi: _avvisiContati ? _avvisiAttivi : null,
         onMieSegnalazioni: () => _apriPagina(
           context,
           s.t('Le mie segnalazioni', 'My reports'),
@@ -708,7 +533,7 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
         },
       ),
       SchermataAmbiente(stato: _ambiente, s: s, incorporata: true),
-      SchermataAssistente(s: s, incorporata: true, onFonte: (ctx, fonte) => _apriFonte(ctx, fonte, s)),
+      SchermataAssistente(s: s, incorporata: true, ambiente: _ambiente, onFonte: (ctx, fonte) => _apriFonte(ctx, fonte, s)),
     ];
     final curva = CurvedAnimation(parent: _transizione, curve: Curves.easeOutCubic);
 
@@ -723,7 +548,12 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
           opacity: curva,
           child: SlideTransition(
             position: Tween<Offset>(begin: Offset(.06 * _direzione, 0), end: Offset.zero).animate(curva),
-            child: IndexedStack(index: _pagina, children: pagine),
+            child: IndexedStack(
+              index: _pagina,
+              children: [
+                for (final (i, p) in pagine.indexed) _aperte.contains(i) ? p : const SizedBox.shrink(),
+              ],
+            ),
           ),
         ),
       ),
@@ -734,26 +564,51 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
       accenti: _accenti,
       onSeleziona: _vaiA,
       voci: [
-        VoceBarra(Icons.home_outlined, Icons.home_rounded, s.t('Inizio', 'Home')),
+        VoceBarra(Icons.home_outlined, Icons.home_rounded, 'Home'),
         VoceBarra(Icons.map_outlined, Icons.map_rounded, s.t('Mappa', 'Map')),
         VoceBarra(Icons.add_location_alt_rounded, Icons.add_location_alt_rounded, s.t('Segnala', 'Report')),
         VoceBarra(Icons.air_rounded, Icons.air_rounded, s.t('Aria', 'Air')),
         VoceBarra(Icons.forum_outlined, Icons.forum_rounded, nomeAssistente),
       ],
     );
+    // Barra in alto leggera: menu, marchio e campanella. Impostazioni, tema,
+    // demo/server e le pagine secondarie stanno nel menu laterale.
     final azioni = [
-      _badgeDemo(s),
-      _interruttoreTema(s),
-      const SizedBox(width: 6),
-      _tondo(
-        tooltip: s.t('Impostazioni', 'Settings'),
-        onPressed: _apriImpostazioni,
-        icona: Icon(Icons.tune_rounded, size: 20, color: foresta),
-      ),
-      const SizedBox(width: 6),
       _campanella(s),
       const SizedBox(width: 12),
     ];
+    final menu = MenuLaterale(
+      s: s,
+      inglese: widget.inglese,
+      onLingua: widget.onLinguaCambiata,
+      demo: widget.demo,
+      server: CitizenApi.instance.baseUrl,
+      cambioInCorso: _cambioProfilo,
+      onProfilo: widget.onCambiaCollegamento == null ? null : _cambiaProfilo,
+      onCambiaServer: widget.onCambiaCollegamento == null
+          ? null
+          : () {
+              CitizenApi.instance.disconnectLive();
+              widget.onCambiaCollegamento!();
+            },
+      onMie: () => _apriPagina(context, null, SchermataSegnalazioni(s: s, soloMie: true)),
+      onIdee: () => _apriIdee(s),
+      onAvvisi: () => _apriAvvisi(s),
+      avvisiAttivi: _avvisiAttivi,
+      avvisiUrgenti: _avvisiUrgenti,
+      tema: switch (widget.modoTema) {
+        ModoTema.chiaro => ThemeMode.light,
+        ModoTema.scuro => ThemeMode.dark,
+        ModoTema.sistema => ThemeMode.system,
+      },
+      onTema: widget.onTemaCambiato == null
+          ? null
+          : (m) => widget.onTemaCambiato!(switch (m) {
+                ThemeMode.light => ModoTema.chiaro,
+                ThemeMode.dark => ModoTema.scuro,
+                ThemeMode.system => ModoTema.sistema,
+              }),
+    );
 
     return AnimatedBuilder(
       animation: _testata,
@@ -761,8 +616,16 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
         final t = Curves.easeOutCubic.transform(_testata.value);
         double tra(double a, double b) => a + (b - a) * t;
         return Scaffold(
+          drawer: menu,
           appBar: AppBar(
-            titleSpacing: 16,
+            titleSpacing: 4,
+            leading: Builder(
+              builder: (ctx) => IconButton(
+                tooltip: s.t('Menu', 'Menu'),
+                onPressed: () => Scaffold.of(ctx).openDrawer(),
+                icon: Icon(Icons.menu_rounded, color: forestaScura),
+              ),
+            ),
             toolbarHeight: tra(64, 52),
             backgroundColor: Color.lerp(sfondo, superficie, t),
             shape: Border(bottom: BorderSide(color: bordo.withValues(alpha: t))),
@@ -1037,6 +900,8 @@ class SchermataInizio extends StatefulWidget {
   final VoidCallback? onMieSegnalazioni;
   /// Dati ambientali (scheda di benvenuto e banner di allerta); senza, non compaiono.
   final StatoAmbiente? ambiente;
+  /// Avvisi attivi, contati da chi tiene la campanella (null finché non si sa).
+  final int? avvisiAttivi;
 
   const SchermataInizio({
     super.key,
@@ -1047,6 +912,7 @@ class SchermataInizio extends StatefulWidget {
     this.onAvvisi,
     this.onMieSegnalazioni,
     this.ambiente,
+    this.avvisiAttivi,
   });
 
   @override
@@ -1056,10 +922,49 @@ class SchermataInizio extends StatefulWidget {
 class _SchermataInizioState extends State<SchermataInizio> {
   /// Cresce a ogni pull-to-refresh: l'anteprima della mappa si ricarica.
   int _aggiornamenti = 0;
+  /// Numeri dei riquadri (null finché non arrivano o senza server).
+  int? _mie, _idee;
+  StreamSubscription<Map<String, dynamic>>? _live;
+  Timer? _debounce;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_contaRiquadri());
+    _live = CitizenApi.instance.events.listen((e) {
+      final tipo = e['type'];
+      if (tipo == 'report_created' || tipo == 'report_status_changed') {
+        _debounce?.cancel();
+        _debounce = Timer(const Duration(milliseconds: 400), _contaRiquadri);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _live?.cancel();
+    _debounce?.cancel();
+    super.dispose();
+  }
+
+  static int _totale(Map<String, dynamic> dati) =>
+      dati['total'] as int? ?? (dati['items'] as List? ?? const []).length;
+
+  Future<void> _contaRiquadri() async {
+    final api = CitizenApi.instance;
+    final (mie, idee) = await (
+      api.getMyReports(limit: 50).then(_totale).then<int?>((n) => n, onError: (_) => null),
+      api.getFeed(kind: 'suggestion', limit: 50).then(_totale).then<int?>((n) => n, onError: (_) => null),
+    ).wait;
+    if (mounted) setState(() { _mie = mie; _idee = idee; });
+  }
 
   Future<void> _aggiorna() async {
     setState(() => _aggiornamenti++);
-    await widget.ambiente?.ricarica(silenzioso: true);
+    await Future.wait([
+      _contaRiquadri(),
+      if (widget.ambiente case final ambiente?) ambiente.ricarica(silenzioso: true),
+    ]);
   }
 
   void _apriAmbiente() {
@@ -1072,44 +977,51 @@ class _SchermataInizioState extends State<SchermataInizio> {
   Widget build(BuildContext context) {
     final s = widget.s;
     final ambiente = widget.ambiente;
+    // Segnala e Parky sono già nella barra in basso: qui solo ciò che non c'è.
+    // Tre riquadri uguali, un numero e una parola: restano allineati in ogni lingua.
     final scorciatoie = [
+      if (widget.onMieSegnalazioni != null)
+        _ScorciatoiaHome(
+          icona: Icons.receipt_long_rounded,
+          numero: _mie,
+          etichetta: s.t('Segnalate', 'Reported'),
+          descrizione: s.t('Le mie segnalazioni', 'My reports'),
+          accento: Accento.arancio,
+          onTap: widget.onMieSegnalazioni,
+        ),
       _ScorciatoiaHome(
         icona: Icons.lightbulb_rounded,
+        numero: _idee,
         etichetta: s.t('Idee', 'Ideas'),
+        descrizione: s.t('Idee per il parco', 'Ideas for the park'),
         accento: Accento.giallo,
         onTap: widget.onIdee,
       ),
       _ScorciatoiaHome(
         icona: Icons.campaign_rounded,
+        numero: widget.avvisiAttivi,
         etichetta: s.t('Avvisi', 'Notices'),
+        descrizione: s.t('Avvisi del parco', 'Park notices'),
         accento: Accento.blu,
         onTap: widget.onAvvisi,
       ),
-      if (widget.onMieSegnalazioni != null)
-        _ScorciatoiaHome(
-          icona: Icons.person_pin_circle_rounded,
-          etichetta: s.t('Le mie segnalazioni', 'My reports'),
-          accento: Accento.arancio,
-          onTap: widget.onMieSegnalazioni,
-        ),
     ];
 
-    // La Home riempie lo schermo: la mappa prende tutto lo spazio che resta.
-    // Su schermi bassi la pagina ha un'altezza minima e scorre.
+    // La Home sta tutta nello schermo e non scorre: la mappa prende lo spazio
+    // che resta. Il trascinamento verso il basso aggiorna senza muovere la pagina.
     return AggiornaTirando(
       onRefresh: _aggiorna,
-      child: LayoutBuilder(
-        builder: (context, vincoli) {
-          final stretto = vincoli.maxWidth < 380;
-          return SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+      child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
+        slivers: [
+          SliverFillRemaining(
             child: Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 760),
                 child: SizedBox(
-                  height: vincoli.maxHeight < 640 ? 640 : vincoli.maxHeight,
+                  height: double.infinity,
                   child: Padding(
-                    padding: EdgeInsets.fromLTRB(stretto ? 16 : 20, 4, stretto ? 16 : 20, 16),
+                    padding: const EdgeInsets.fromLTRB(margineLaterale, 4, margineLaterale, 16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
@@ -1149,12 +1061,13 @@ class _SchermataInizioState extends State<SchermataInizio> {
                 ),
               ),
             ),
-          );
-        },
+          ),
+        ],
       ),
     );
   }
 }
+
 
 /// Scheda di benvenuto in cima alla Home: saluto in base all'ora e, se il
 /// parco ha sensori, il giudizio sull'aria con la temperatura.
@@ -1372,53 +1285,94 @@ class _IconaOscillanteState extends State<_IconaOscillante> with SingleTickerPro
       );
 }
 
-/// Scorciatoia della Home: icona e una o due parole.
+/// Riquadro della Home: icona piccola in alto, un numero grande e una parola.
+/// Tutti uguali, così restano allineati qualunque sia la lingua.
 class _ScorciatoiaHome extends StatelessWidget {
   final IconData icona;
+  /// Numero da mostrare; null finché non si conosce (si vede un trattino).
+  final int? numero;
   final String etichetta;
+  /// Nome completo per i lettori di schermo.
+  final String descrizione;
   final Accento accento;
   final VoidCallback? onTap;
 
   const _ScorciatoiaHome({
     required this.icona,
+    this.numero,
     required this.etichetta,
+    required this.descrizione,
     required this.accento,
     required this.onTap,
   });
 
   @override
-  Widget build(BuildContext context) => Semantics(
-        button: true,
-        label: etichetta,
-        onTap: onTap,
-        excludeSemantics: true,
-        child: Premibile(
-          onTap: onTap,
-          child: Container(
-            height: 84,
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            decoration: BoxDecoration(
-              color: accento.tinta,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: accento.base.withValues(alpha: .22)),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(icona, size: 26, color: accento.forte),
-                const SizedBox(height: 5),
-                Text(
-                  etichetta,
-                  maxLines: 2,
-                  textAlign: TextAlign.center,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 12.5, height: 1.15, fontWeight: FontWeight.w800, color: accento.forte),
+  Widget build(BuildContext context) {
+    final raggio = BorderRadius.circular(20);
+    return Semantics(
+      button: true,
+      label: numero == null ? descrizione : '$descrizione: $numero',
+      onTap: onTap,
+      excludeSemantics: true,
+      child: ScalaAlTocco(
+        scala: .95,
+        child: Material(
+          color: accento.tinta,
+          shape: RoundedRectangleBorder(
+            borderRadius: raggio,
+            side: BorderSide(color: accento.base.withValues(alpha: .22)),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onTap,
+            child: SizedBox(
+              height: 84,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: AnimatedSwitcher(
+                            duration: durata(context, 220),
+                            transitionBuilder: (figlio, anim) => FadeTransition(opacity: anim, child: figlio),
+                            layoutBuilder: (corrente, precedenti) =>
+                                Stack(alignment: Alignment.centerLeft, children: [...precedenti, ?corrente]),
+                            child: Text(
+                              numero?.toString() ?? '–',
+                              key: ValueKey(numero),
+                              maxLines: 1,
+                              style: TextStyle(
+                                fontSize: 26,
+                                height: 1.1,
+                                fontWeight: FontWeight.w900,
+                                color: accento.forte,
+                                fontFeatures: const [FontFeature.tabularFigures()],
+                              ),
+                            ),
+                          ),
+                        ),
+                        Icon(icona, size: 20, color: accento.forte.withValues(alpha: .75)),
+                      ],
+                    ),
+                    const Spacer(),
+                    Text(
+                      etichetta,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800, color: accento.forte),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         ),
-      );
+      ),
+    );
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

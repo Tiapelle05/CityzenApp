@@ -90,8 +90,8 @@ class GraficoSerie extends StatelessWidget {
   final EnvSeries serie;
   final EnvMetric? metrica;
   final Copie s;
-  final Color? _colore;
-  Color get colore => _colore ?? foresta;
+  final Color? coloreScelto;
+  Color get colore => coloreScelto ?? foresta;
   final double altezza;
 
   const GraficoSerie({
@@ -101,7 +101,7 @@ class GraficoSerie extends StatelessWidget {
     required this.s,
     Color? colore,
     this.altezza = 260,
-  }) : _colore = colore;
+  }) : coloreScelto = colore;
 
   /// Minuti "da orologio locale": le etichette cadono su ore tonde del telefono.
   static double _x(DateTime t) => (t.millisecondsSinceEpoch + t.toLocal().timeZoneOffset.inMilliseconds) / 60000;

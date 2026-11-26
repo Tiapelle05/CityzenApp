@@ -7,7 +7,8 @@ import 'package:flutter/services.dart' show HapticFeedback, SystemUiOverlayStyle
 // Palette
 // Un verde foresta come colore dell'app, più quattro accenti caldi e freddi
 // che danno a ogni sezione la sua identità. Le varianti "Scuro" servono per
-// i testi su fondo chiaro, le "Chiaro" per gli sfondi tenui.
+// i testi (sul tema scuro sono più chiare, per leggersi sul fondo), le
+// "Chiaro" per gli sfondi tenui.
 // ─────────────────────────────────────────────────────────────────────────────
 
 // I colori sono getter e non costanti: cambiano con il tema chiaro o scuro.
@@ -56,6 +57,10 @@ Color get bordoForte => _t(0xFFC9D6C6, 0xFF3B4B41);
 /// Ombra delle schede: quasi invisibile al buio, dove contano i bordi.
 Color get ombra => _t(0x0D12261B, 0x40000000);
 
+/// Testo e icone sopra un riempimento d'accento (pulsanti pieni, filtri scelti):
+/// gli accenti restano di tono medio anche al buio, quindi il bianco si legge sempre.
+const Color suAccento = Colors.white;
+
 /// Terna di colori di un accento: [base] per decorazioni, [forte] per testi e
 /// icone su fondo chiaro, [tinta] per gli sfondi tenui.
 /// Al buio [forte] diventa più luminoso e [tinta] un velo del colore base.
@@ -79,6 +84,9 @@ class Accento {
   static const giallo = Accento(sole, Color(0xFF8F5B00), Color(0xFFFFF2D2));
   static const viola = Accento(Color(0xFF6E52D4), Color(0xFF6E52D4), Color(0xFFEEEAFB));
   static const acqua = Accento(Color(0xFF14A3A3), Color(0xFF0B6E6E), Color(0xFFDDF4F2));
+
+  /// Grigio, per icone che non devono richiamare una sezione.
+  static Accento get neutro => Accento(testoTenue, testoSecondario, sfondo);
 }
 
 /// Ricostruisce tutti i widget montati, mantenendone lo stato: serve dopo il
@@ -229,7 +237,7 @@ ThemeData temaTryees() {
     ),
     snackBarTheme: SnackBarThemeData(
       behavior: SnackBarBehavior.floating,
-      backgroundColor: forestaScura,
+      backgroundColor: temaScuro ? const Color(0xFF2A3A30) : forestaScura,
       contentTextStyle: const TextStyle(color: Colors.white, fontSize: 14),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
     ),
@@ -252,9 +260,14 @@ ThemeData temaTryees() {
 // Componenti condivisi
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// Margine laterale di tutte le schede: titoli, schede ed elenchi partono
+/// dalla stessa linea, così passando da una scheda all'altra nulla salta.
+const double margineLaterale = 16;
+
 class ContenitorePagina extends StatelessWidget {
   final Widget child;
-  const ContenitorePagina({super.key, required this.child});
+  final ScrollController? controller;
+  const ContenitorePagina({super.key, required this.child, this.controller});
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -268,13 +281,11 @@ class ContenitorePagina extends StatelessWidget {
               minHeight: constraints.maxHeight.isFinite ? constraints.maxHeight : 0,
             ),
             child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-              padding: EdgeInsets.fromLTRB(
-                constraints.maxWidth < 380 ? 16 : 20,
-                4,
-                constraints.maxWidth < 380 ? 16 : 20,
-                32,
-              ),
+              controller: controller,
+              // Scorrimento del sistema: su Android la pagina si ferma al fondo
+              // invece di rimbalzare (il rimbalzo «rilanciava» la pagina verso l'alto).
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(margineLaterale, 0, margineLaterale, 32),
               child: child,
             ),
           ),
@@ -283,24 +294,109 @@ class ContenitorePagina extends StatelessWidget {
 }
 
 /// Fa comparire il contenuto con dissolvenza e un breve scivolamento verso l'alto.
-/// [indice] ritarda leggermente gli elementi successivi per un effetto a cascata.
-class Appare extends StatelessWidget {
+/// [indice] ritarda gli elementi successivi per un effetto a cascata: ognuno
+/// parte poco dopo il precedente e dura quanto gli altri.
+///
+/// Usa [FadeTransition] e [SlideTransition]: a ogni fotogramma cambiano solo
+/// i parametri di disegno, senza ricostruire il contenuto.
+class Appare extends StatefulWidget {
   final Widget child;
   final int indice;
-  const Appare({super.key, required this.child, this.indice = 0});
+  /// Falso per mostrare subito il contenuto (per esempio un messaggio già
+  /// comparso che torna visibile scorrendo l'elenco).
+  final bool attiva;
+  const Appare({super.key, required this.child, this.indice = 0, this.attiva = true});
+
+  /// Durata della comparsa di un singolo elemento e ritardo tra uno e l'altro.
+  static const int durataMs = 360, passoMs = 55;
+
+  @override
+  State<Appare> createState() => _AppareState();
+}
+
+class _AppareState extends State<Appare> with SingleTickerProviderStateMixin {
+  late final int _ritardo = widget.indice.clamp(0, 6) * Appare.passoMs;
+  late final AnimationController _anim = AnimationController(
+    vsync: this,
+    duration: Duration(milliseconds: Appare.durataMs + _ritardo),
+  );
+  late final Animation<double> _curva = _anim.drive(
+    CurveTween(curve: Interval(_ritardo / (Appare.durataMs + _ritardo), 1, curve: Curves.easeOutCubic)),
+  );
+  late final Animation<Offset> _scivola =
+      Tween<Offset>(begin: const Offset(0, .04), end: Offset.zero).animate(_curva);
+  bool _avviata = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_avviata) return;
+    _avviata = true;
+    if (!widget.attiva || MediaQuery.of(context).disableAnimations) {
+      _anim.value = 1;
+    } else {
+      _anim.forward();
+    }
+  }
+
+  @override
+  void dispose() {
+    _anim.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => FadeTransition(
+        opacity: _curva,
+        child: SlideTransition(position: _scivola, child: widget.child),
+      );
+}
+
+/// Curve da dare all'[AnimatedSwitcher] che usa [transizioneMorbida].
+const Curve curvaEntrata = Curves.easeOutCubic, curvaUscita = Curves.easeInCubic;
+
+/// Transizione per [AnimatedSwitcher]: dissolvenza con un leggero
+/// scivolamento verso l'alto, come [Appare]. Le curve vanno impostate sullo
+/// switcher ([curvaEntrata], [curvaUscita]): qui non si crea nessuna
+/// CurvedAnimation, perché lo switcher richiama questa funzione a ogni
+/// aggiornamento del figlio e ognuna resterebbe in ascolto del controller.
+Widget transizioneMorbida(Widget figlio, Animation<double> animazione) => FadeTransition(
+      opacity: animazione,
+      child: SlideTransition(
+        position: Tween<Offset>(begin: const Offset(0, .02), end: Offset.zero).animate(animazione),
+        child: figlio,
+      ),
+    );
+
+/// Disposizione per [AnimatedSwitcher] allineata in alto: il contenuto
+/// uscente non salta al centro quando ha un'altezza diversa dal nuovo.
+Widget disposizioneInAlto(Widget? attuale, List<Widget> precedenti) => Stack(
+      alignment: Alignment.topCenter,
+      children: [...precedenti, ?attuale],
+    );
+
+/// [AnimatedSwitcher] con la dissolvenza dell'app e altezza che si adatta
+/// con morbidezza al nuovo contenuto.
+class CambioMorbido extends StatelessWidget {
+  final Widget child;
+  final int ms;
+  const CambioMorbido({super.key, required this.child, this.ms = 260});
 
   @override
   Widget build(BuildContext context) {
-    final ms = 380 + (indice.clamp(0, 6) * 70);
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
-      duration: durata(context, ms),
+    final d = durata(context, ms);
+    return AnimatedSize(
+      duration: d,
       curve: Curves.easeOutCubic,
-      builder: (context, v, figlio) => Opacity(
-        opacity: v,
-        child: Transform.translate(offset: Offset(0, 14 * (1 - v)), child: figlio),
+      alignment: Alignment.topCenter,
+      child: AnimatedSwitcher(
+        duration: d,
+        switchInCurve: curvaEntrata,
+        switchOutCurve: curvaUscita,
+        transitionBuilder: transizioneMorbida,
+        layoutBuilder: disposizioneInAlto,
+        child: child,
       ),
-      child: child,
     );
   }
 }
@@ -347,7 +443,8 @@ class TitoloPagina extends StatelessWidget {
   final String titolo;
   final String? descrizione;
   final IconData? icona;
-  final Accento accento;
+  final Accento? accentoScelto;
+  Accento get accento => accentoScelto ?? Accento.verde;
   final Widget? azione;
 
   const TitoloPagina({
@@ -355,18 +452,24 @@ class TitoloPagina extends StatelessWidget {
     required this.titolo,
     this.descrizione,
     this.icona,
-    this.accento = Accento.verde,
+    Accento? accento,
     this.azione,
-  });
+  }) : accentoScelto = accento;
+
+  /// Altezza fissa dell'intestazione: uguale in ogni scheda, con o senza
+  /// descrizione e pulsante, così il contenuto parte sempre alla stessa quota.
+  static const double altezza = 64;
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(top: 4, bottom: 16),
-        child: Row(
+        padding: const EdgeInsets.only(top: 6, bottom: 12),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: altezza - 18),
+          child: Row(
           children: [
             if (icona != null) ...[
               ExcludeSemantics(
-                child: IconaTonda(icona!, colore: accento.forte, sfondo: accento.tinta, dimensione: 38),
+                child: IconaTonda(icona!, colore: accento.forte, sfondo: accento.tinta, dimensione: 42),
               ),
               const SizedBox(width: 12),
             ],
@@ -379,9 +482,11 @@ class TitoloPagina extends StatelessWidget {
                   children: [
                     Text(
                       titolo,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         color: testo,
-                        fontSize: 23,
+                        fontSize: 22,
                         height: 1.15,
                         fontWeight: FontWeight.w800,
                         letterSpacing: -.4,
@@ -402,6 +507,7 @@ class TitoloPagina extends StatelessWidget {
             ),
             if (azione != null) ...[const SizedBox(width: 8), azione!],
           ],
+          ),
         ),
       );
 }
@@ -410,8 +516,9 @@ class TitoloPagina extends StatelessWidget {
 class TitoloSezione extends StatelessWidget {
   final String titolo;
   final String? dettaglio;
-  final Accento accento;
-  const TitoloSezione(this.titolo, {super.key, this.dettaglio, this.accento = Accento.verde});
+  final Accento? accentoScelto;
+  Accento get accento => accentoScelto ?? Accento.verde;
+  const TitoloSezione(this.titolo, {super.key, this.dettaglio, Accento? accento}) : accentoScelto = accento;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -436,11 +543,11 @@ class TitoloSezione extends StatelessWidget {
 /// Quadrato arrotondato colorato con icona.
 class IconaTonda extends StatelessWidget {
   final IconData icona;
-  final Color? _colore;
-  Color get colore => _colore ?? foresta;
+  final Color? coloreScelto;
+  Color get colore => coloreScelto ?? foresta;
   final Color? sfondo;
   final double dimensione;
-  const IconaTonda(this.icona, {super.key, Color? colore, this.sfondo, this.dimensione = 44}) : _colore = colore;
+  const IconaTonda(this.icona, {super.key, Color? colore, this.sfondo, this.dimensione = 44}) : coloreScelto = colore;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -459,8 +566,8 @@ class IconaTonda extends StatelessWidget {
 class Scheda extends StatelessWidget {
   final Widget child;
   final EdgeInsets padding;
-  final Color? _colore;
-  Color get colore => _colore ?? superficie;
+  final Color? coloreScelto;
+  Color get colore => coloreScelto ?? superficie;
   final Color? coloreBordo;
   final VoidCallback? onTap;
 
@@ -471,7 +578,7 @@ class Scheda extends StatelessWidget {
     Color? colore,
     this.coloreBordo,
     this.onTap,
-  }) : _colore = colore;
+  }) : coloreScelto = colore;
 
   @override
   Widget build(BuildContext context) {
@@ -546,8 +653,8 @@ class _ScalaAlToccoState extends State<ScalaAlTocco> {
 /// Piccola etichetta a pillola, con puntino o icona opzionali.
 class Etichetta extends StatelessWidget {
   final String testo;
-  final Color? _colore;
-  Color get colore => _colore ?? foresta;
+  final Color? coloreScelto;
+  Color get colore => coloreScelto ?? foresta;
   final Color? sfondo;
   final IconData? icona;
   final bool puntino;
@@ -559,7 +666,7 @@ class Etichetta extends StatelessWidget {
     this.sfondo,
     this.icona,
     this.puntino = false,
-  }) : _colore = colore;
+  }) : coloreScelto = colore;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -595,9 +702,10 @@ class Etichetta extends StatelessWidget {
 class Riquadro extends StatelessWidget {
   final IconData icona;
   final String messaggio;
-  final Accento accento;
+  final Accento? accentoScelto;
+  Accento get accento => accentoScelto ?? Accento.verde;
 
-  const Riquadro({super.key, required this.icona, required this.messaggio, this.accento = Accento.verde});
+  const Riquadro({super.key, required this.icona, required this.messaggio, Accento? accento}) : accentoScelto = accento;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -647,7 +755,8 @@ class AggiornaTirando extends StatelessWidget {
 class StatoVuoto extends StatelessWidget {
   final IconData icona;
   final String messaggio;
-  final Accento accento;
+  final Accento? accentoScelto;
+  Accento get accento => accentoScelto ?? Accento.verde;
   final VoidCallback? onAzione;
   final String? etichettaAzione;
 
@@ -655,10 +764,10 @@ class StatoVuoto extends StatelessWidget {
     super.key,
     required this.icona,
     required this.messaggio,
-    this.accento = Accento.verde,
+    Accento? accento,
     this.onAzione,
     this.etichettaAzione,
-  });
+  }) : accentoScelto = accento;
 
   @override
   Widget build(BuildContext context) => Appare(
@@ -973,8 +1082,8 @@ class _CaricamentoScheletroState extends State<CaricamentoScheletro> with Single
 class PulsanteAzione extends StatelessWidget {
   final String testo;
   final IconData icona;
-  final Color? _colore;
-  Color get colore => _colore ?? foresta;
+  final Color? coloreScelto;
+  Color get colore => coloreScelto ?? foresta;
   final VoidCallback? onPressed;
   final bool outlined;
 
@@ -985,7 +1094,7 @@ class PulsanteAzione extends StatelessWidget {
     Color? colore,
     this.onPressed,
     this.outlined = false,
-  }) : _colore = colore;
+  }) : coloreScelto = colore;
 
   @override
   Widget build(BuildContext context) {
@@ -1009,7 +1118,7 @@ class PulsanteAzione extends StatelessWidget {
               child: contenuto,
             )
           : FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: colore, foregroundColor: Colors.white),
+              style: FilledButton.styleFrom(backgroundColor: colore, foregroundColor: suAccento),
               onPressed: onPressed,
               child: contenuto,
             ),

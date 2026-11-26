@@ -225,7 +225,8 @@ void main() {
       await tester.pump(const Duration(seconds: 2));
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.textContaining('Aria buona'), findsOneWidget);
-      expect(find.text('Dati ambientali'), findsOneWidget);
+      // Il link porta il nome della stazione, non un generico «Dati ambientali».
+      expect(find.widgetWithText(ActionChip, 'Stazione 1'), findsOneWidget);
     });
   });
 }
