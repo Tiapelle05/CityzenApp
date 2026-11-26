@@ -51,6 +51,8 @@ class Accento {
   static const giallo = Accento(sole, soleScuro, soleChiaro);
   static const viola = Accento(lavanda, lavanda, lavandaChiaro);
   static const acqua = Accento(Color(0xFF14A3A3), Color(0xFF0B6E6E), Color(0xFFDDF4F2));
+  /// Grigio, per icone che non devono richiamare una sezione.
+  static const neutro = Accento(testoTenue, testoSecondario, sfondo);
 }
 
 /// Durata delle animazioni, azzerata se l'utente le disattiva.
@@ -195,7 +197,8 @@ const double margineLaterale = 16;
 
 class ContenitorePagina extends StatelessWidget {
   final Widget child;
-  const ContenitorePagina({super.key, required this.child});
+  final ScrollController? controller;
+  const ContenitorePagina({super.key, required this.child, this.controller});
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -209,7 +212,10 @@ class ContenitorePagina extends StatelessWidget {
               minHeight: constraints.maxHeight.isFinite ? constraints.maxHeight : 0,
             ),
             child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+              controller: controller,
+              // Scorrimento del sistema: su Android la pagina si ferma al fondo
+              // invece di rimbalzare (il rimbalzo «rilanciava» la pagina verso l'alto).
+              physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(margineLaterale, 0, margineLaterale, 32),
               child: child,
             ),

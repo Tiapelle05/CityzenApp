@@ -33,11 +33,13 @@ void main() {
     expect(find.byType(SchermataSegnalazioni, skipOffstage: false), findsNothing);
     expect(find.byType(SchermataAssistente, skipOffstage: false), findsNothing);
 
-    await tester.tap(find.byTooltip('Cambia lingua'));
+    // La lingua si cambia dal menu laterale.
+    await tester.tap(find.byTooltip('Menu'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byWidgetPredicate(
-      (widget) => widget is CheckedPopupMenuItem<bool> && widget.value == true,
-    ));
+    await tester.tap(find.text('EN'));
+    await tester.pumpAndSettle();
+    expect(find.text('SETTINGS'), findsOneWidget);
+    Navigator.of(tester.element(find.text('SETTINGS'))).pop();
     await tester.pumpAndSettle();
 
     expect(find.text('Open the map'), findsOneWidget);

@@ -14,6 +14,7 @@ import 'barra_schede.dart';
 import 'citizen_api.dart';
 import 'modelli/ambiente.dart';
 import 'mappa_parco.dart';
+import 'menu_laterale.dart';
 import 'schermata_accesso.dart';
 import 'schermata_segnalazioni.dart';
 import 'ui.dart';
@@ -88,6 +89,9 @@ class NavigazionePrincipale extends StatefulWidget {
   final VoidCallback? onCambiaCollegamento;
   /// Chiamata dopo il passaggio diretto demo ⇄ server: l'app ricarica le schermate.
   final VoidCallback? onProfiloCambiato;
+  /// Tema scelto e cambio del tema (senza [onTema] la scelta non compare nel menu).
+  final ThemeMode tema;
+  final ValueChanged<ThemeMode>? onTema;
 
   const NavigazionePrincipale({
     super.key,
@@ -96,6 +100,8 @@ class NavigazionePrincipale extends StatefulWidget {
     this.demo = false,
     this.onCambiaCollegamento,
     this.onProfiloCambiato,
+    this.tema = ThemeMode.system,
+    this.onTema,
   });
 
   @override
@@ -408,143 +414,6 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
     }
   }
 
-  Widget _selettoreLingua(Copie s) {
-    return PopupMenuButton<bool>(
-      tooltip: s.t('Cambia lingua', 'Change language'),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      position: PopupMenuPosition.under,
-      onSelected: widget.onLinguaCambiata,
-      itemBuilder: (context) => [
-        CheckedPopupMenuItem<bool>(
-          value: false,
-          checked: !widget.inglese,
-          child: const Row(children: [Text('🇮🇹'), SizedBox(width: 10), Text('Italiano')]),
-        ),
-        CheckedPopupMenuItem<bool>(
-          value: true,
-          checked: widget.inglese,
-          child: const Row(children: [Text('🇬🇧'), SizedBox(width: 10), Text('English')]),
-        ),
-      ],
-      // Solo la sigla, in un cerchio come la campanella: lascia spazio al marchio.
-      child: Container(
-        width: 40,
-        height: 40,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: superficie,
-          shape: BoxShape.circle,
-          border: Border.all(color: bordo),
-        ),
-        child: Text(
-          widget.inglese ? 'EN' : 'IT',
-          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: foresta, letterSpacing: .4),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _apriCollegamento(Copie s) async {
-    final demo = widget.demo;
-    final server = CitizenApi.instance.baseUrl;
-    final cambia = await showModalBottomSheet<bool>(
-      context: context,
-      showDragHandle: true,
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(22, 0, 22, 22),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(children: [
-                IconaTonda(
-                  demo ? Icons.science_rounded : Icons.cloud_done_rounded,
-                  colore: demo ? lavanda : foresta,
-                  sfondo: demo ? lavandaChiaro : menta,
-                  dimensione: 48,
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(
-                      demo ? s.t('Modalità demo', 'Demo mode') : s.t('Collegato al server', 'Connected to the server'),
-                      style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w900),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      demo ? s.t('Dati simulati, nulla viene inviato.', 'Simulated data, nothing is sent.') : server,
-                      style: const TextStyle(fontSize: 14, color: testoSecondario),
-                    ),
-                  ]),
-                ),
-              ]),
-              const SizedBox(height: 20),
-              SizedBox(
-                height: 52,
-                child: FilledButton.tonalIcon(
-                  onPressed: () => Navigator.of(ctx).pop(true),
-                  icon: const Icon(Icons.swap_horiz_rounded),
-                  label: Text(demo ? s.t('Collegati a un server', 'Connect to a server') : s.t('Cambia server o usa la demo', 'Change server or use demo')),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-    if (cambia == true) {
-      CitizenApi.instance.disconnectLive();
-      widget.onCambiaCollegamento?.call();
-    }
-  }
-
-  /// Tasto unico Demo/Server nella barra in alto: mostra il profilo attivo e un
-  /// tocco passa all'altro. Una pressione lunga apre i dettagli del collegamento
-  /// (per cambiare server).
-  Widget _pulsanteCollegamento(Copie s) {
-    final demo = widget.demo;
-    final colore = demo ? lavanda : foresta;
-    final etichetta = demo ? 'Demo' : 'Server';
-    final altro = demo ? 'Server' : 'Demo';
-    return Semantics(
-      button: true,
-      label: s.t('Modalità $etichetta', '$etichetta mode'),
-      hint: s.t('Tocca per passare a $altro', 'Tap to switch to $altro'),
-      excludeSemantics: true,
-      child: Tooltip(
-        message: s.t(
-          'Tocca per passare a $altro · tieni premuto per i dettagli',
-          'Tap to switch to $altro · long press for details',
-        ),
-        child: Material(
-          color: demo ? lavandaChiaro : menta,
-          shape: StadiumBorder(side: BorderSide(color: colore.withValues(alpha: .35))),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: _cambioProfilo ? null : () => _cambiaProfilo(!demo),
-            onLongPress: _cambioProfilo ? null : () => _apriCollegamento(s),
-            child: Container(
-              constraints: const BoxConstraints(minHeight: 40),
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                if (_cambioProfilo)
-                  SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: colore))
-                else
-                  Icon(demo ? Icons.science_rounded : Icons.cloud_done_rounded, size: 18, color: colore),
-                const SizedBox(width: 6),
-                Text(
-                  etichetta.toUpperCase(),
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: colore, letterSpacing: .5),
-                ),
-              ]),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   /// Campanella degli avvisi nella barra in alto, con il numero di quelli attivi
   /// (rosso se almeno uno è importante).
   Widget _campanella(Copie s) {
@@ -656,11 +525,41 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
     final pagine = _schede(s);
 
     return Scaffold(
+      // Collegamento, lingua, tema e pagine secondarie stanno nel menu laterale:
+      // in alto restano solo menu, marchio e campanella.
+      drawer: MenuLaterale(
+        s: s,
+        inglese: widget.inglese,
+        onLingua: widget.onLinguaCambiata,
+        demo: widget.demo,
+        server: CitizenApi.instance.baseUrl,
+        cambioInCorso: _cambioProfilo,
+        onProfilo: widget.onCambiaCollegamento == null ? null : _cambiaProfilo,
+        onCambiaServer: widget.onCambiaCollegamento == null
+            ? null
+            : () {
+                CitizenApi.instance.disconnectLive();
+                widget.onCambiaCollegamento!();
+              },
+        onMie: () => _apriPagina(context, null, SchermataSegnalazioni(s: s, soloMie: true)),
+        onIdee: () => _apriIdee(s),
+        onAvvisi: () => _apriAvvisi(s),
+        avvisiAttivi: _avvisiAttivi,
+        avvisiUrgenti: _avvisiUrgenti,
+        tema: widget.tema,
+        onTema: widget.onTema,
+      ),
       appBar: AppBar(
-        titleSpacing: 16,
+        titleSpacing: 4,
         toolbarHeight: 64,
-        // Marchio su due righe (Treeyes / CITYZEN) che si rimpicciolisce invece di
-        // troncarsi: così resta leggibile accanto a Demo|Server, lingua e avvisi.
+        leading: Builder(
+          builder: (ctx) => IconButton(
+            tooltip: s.t('Menu', 'Menu'),
+            onPressed: () => Scaffold.of(ctx).openDrawer(),
+            icon: const Icon(Icons.menu_rounded, color: forestaScura),
+          ),
+        ),
+        // Marchio su due righe (Treeyes / CITYZEN) che si rimpicciolisce invece di troncarsi.
         title: Row(
           children: [
             Image.asset('Assets/logo_treeyes.png', height: 40, semanticLabel: 'Treeyes_Cityzen'),
@@ -700,12 +599,6 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
           ],
         ),
         actions: [
-          if (widget.onCambiaCollegamento != null) ...[
-            _pulsanteCollegamento(s),
-            const SizedBox(width: 6),
-          ],
-          _selettoreLingua(s),
-          const SizedBox(width: 6),
           _campanella(s),
           const SizedBox(width: 12),
         ],
@@ -1102,35 +995,30 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
       nomeIt: 'Cestini e rifiuti',
       nomeEn: 'Bins and waste',
       icona: Icons.delete_outline_rounded,
-      accento: Accento.blu,
     ),
     _CategoriaSegnalazione(
       id: 'green',
       nomeIt: 'Verde e piante',
       nomeEn: 'Trees and plants',
       icona: Icons.park_outlined,
-      accento: Accento.verde,
     ),
     _CategoriaSegnalazione(
       id: 'furniture',
       nomeIt: 'Arredi e panchine',
       nomeEn: 'Benches and furniture',
       icona: Icons.chair_outlined,
-      accento: Accento.arancio,
     ),
     _CategoriaSegnalazione(
       id: 'lighting',
       nomeIt: 'Illuminazione',
       nomeEn: 'Lighting',
       icona: Icons.lightbulb_outline_rounded,
-      accento: Accento.giallo,
     ),
     _CategoriaSegnalazione(
       id: 'other',
       nomeIt: 'Altro',
       nomeEn: 'Other',
       icona: Icons.more_horiz_rounded,
-      accento: Accento.viola,
     ),
   ];
 
@@ -1155,6 +1043,7 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
   @override
   void dispose() {
     _descrizione.dispose();
+    _scorrimento.dispose();
     super.dispose();
   }
 
@@ -1179,6 +1068,7 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
         _errore = null;
         _passaggio++;
       });
+      _inCima();
       // La posizione si cerca da sola: l'utente non deve premere nulla.
       if (_passaggio == 1 && _posizione == null && !_caricamentoGps) unawaited(_rilevaPosizione());
     } else {
@@ -1192,6 +1082,7 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
         _errore = null;
         _passaggio--;
       });
+      _inCima();
     }
   }
 
@@ -1353,93 +1244,52 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
 
   // ── Indicatore dei passaggi ────────────────────────────────────────────────
 
-  Widget _indicatorePassaggi(Copie s) {
-    final nomi = [
-      s.t('Cosa', 'What'),
-      s.t('Dove e foto', 'Where and photo'),
-      s.t('Invia', 'Send'),
-    ];
+  List<String> _nomiPassaggi(Copie s) => [
+        s.t('Cosa hai notato', 'What you noticed'),
+        s.t('Posizione e foto', 'Location and photo'),
+        s.t('Riepilogo', 'Summary'),
+      ];
 
-    Widget linea(bool attiva) => AnimatedContainer(
-          duration: durata(context, 300),
-          height: 3,
-          decoration: BoxDecoration(
-            color: attiva ? foresta : bordo,
-            borderRadius: BorderRadius.circular(3),
-          ),
-        );
-
-    Widget cerchio(int i) {
-      final completato = i < _passaggio;
-      final corrente = i == _passaggio;
-      return AnimatedContainer(
-        duration: durata(context, 300),
-        width: 34,
-        height: 34,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: completato || corrente ? foresta : superficie,
-          border: Border.all(color: completato || corrente ? foresta : bordoForte, width: 1.5),
-          boxShadow: corrente ? [const BoxShadow(color: Color(0x5517694A), blurRadius: 0, spreadRadius: 4)] : null,
+  /// Tre tratti sottili sotto il titolo: si colorano man mano che si avanza.
+  Widget _barraAvanzamento(Copie s) => Semantics(
+        liveRegion: true,
+        label: s.t(
+          'Passaggio ${_passaggio + 1} di 3: ${_nomiPassaggi(s)[_passaggio]}',
+          'Step ${_passaggio + 1} of 3: ${_nomiPassaggi(s)[_passaggio]}',
         ),
-        child: Center(
-          child: completato
-              ? const Icon(Icons.check_rounded, size: 19, color: Colors.white)
-              : Text(
-                  '${i + 1}',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                    color: corrente ? Colors.white : testoSecondario,
+        excludeSemantics: true,
+        child: Row(
+          children: [
+            for (var i = 0; i < 3; i++) ...[
+              if (i > 0) const SizedBox(width: 6),
+              Expanded(
+                child: AnimatedContainer(
+                  duration: durata(context, 300),
+                  curve: Curves.easeOutCubic,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: i <= _passaggio ? Accento.arancio.base : bordo,
+                    borderRadius: BorderRadius.circular(3),
                   ),
                 ),
+              ),
+            ],
+          ],
         ),
       );
-    }
 
-    return Semantics(
-      container: true,
-      liveRegion: true,
-      label: s.t(
-        'Passaggio ${_passaggio + 1} di 3: ${nomi[_passaggio]}',
-        'Step ${_passaggio + 1} of 3: ${nomi[_passaggio]}',
-      ),
-      child: ExcludeSemantics(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: List.generate(
-            3,
-            (i) => Expanded(
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      Expanded(child: i == 0 ? const SizedBox() : linea(i <= _passaggio)),
-                      const SizedBox(width: 6),
-                      cerchio(i),
-                      const SizedBox(width: 6),
-                      Expanded(child: i == 2 ? const SizedBox() : linea(i < _passaggio)),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    nomi[i],
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      height: 1.2,
-                      fontWeight: i == _passaggio ? FontWeight.w800 : FontWeight.w600,
-                      color: i == _passaggio ? foresta : i < _passaggio ? testo : testoSecondario,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
+  /// Ogni passaggio parte dall'inizio della pagina: senza, passando da un
+  /// passaggio lungo a uno corto la pagina restava a metà e poi saltava su.
+  final ScrollController _scorrimento = ScrollController();
+
+  void _inCima() {
+    if (!_scorrimento.hasClients || _scorrimento.offset == 0) return;
+    final d = durata(context, 300);
+    if (d == Duration.zero) {
+      _scorrimento.jumpTo(0);
+    } else {
+      _scorrimento.animateTo(0, duration: d, curve: Curves.easeOutCubic);
+    }
   }
 
   Widget _intestazionePassaggio(String titolo, String descrizione) => Column(
@@ -1471,7 +1321,8 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
   Widget _schedaCategoria(_CategoriaSegnalazione categoria, Copie s) {
     final selezionata = _categoria == categoria.id;
     final nome = s.t(categoria.nomeIt, categoria.nomeEn);
-    final accento = categoria.accento;
+    // Un solo colore, quello di Segnala, e solo sulla voce scelta: le altre restano neutre.
+    const accento = Accento.arancio;
 
     void selezionaCategoria() {
       setState(() {
@@ -1495,53 +1346,42 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
           duration: durata(context, 180),
           decoration: BoxDecoration(
             color: selezionata ? accento.tinta : superficie,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: selezionata ? accento.base : bordo,
-              width: selezionata ? 2 : 1,
+              width: selezionata ? 1.6 : 1,
             ),
-            boxShadow: selezionata
-                ? [BoxShadow(color: accento.base.withValues(alpha: .18), blurRadius: 14, offset: const Offset(0, 6))]
-                : const [BoxShadow(color: Color(0x0A12261B), blurRadius: 10, offset: Offset(0, 4))],
           ),
           child: Material(
             type: MaterialType.transparency,
             child: InkWell(
               onTap: selezionaCategoria,
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(16),
               child: Container(
-                constraints: const BoxConstraints(minHeight: 112),
-                padding: const EdgeInsets.all(14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                constraints: const BoxConstraints(minHeight: 62),
+                padding: const EdgeInsets.fromLTRB(12, 8, 10, 8),
+                child: Row(
                   children: [
-                    Row(
-                      children: [
-                        IconaTonda(
-                          categoria.icona,
-                          colore: accento.forte,
-                          sfondo: selezionata ? superficie : accento.tinta,
-                          dimensione: 42,
+                    Icon(categoria.icona, size: 23, color: selezionata ? accento.forte : testoSecondario),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        nome,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: selezionata ? accento.forte : testo,
+                          fontSize: 14,
+                          height: 1.2,
+                          fontWeight: selezionata ? FontWeight.w800 : FontWeight.w700,
                         ),
-                        const Spacer(),
-                        AnimatedScale(
-                          scale: selezionata ? 1 : 0,
-                          duration: durata(context, 200),
-                          curve: Curves.easeOutBack,
-                          child: Icon(Icons.check_circle_rounded, color: accento.forte, size: 24),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      nome,
-                      style: TextStyle(
-                        color: testo,
-                        fontSize: 15,
-                        height: 1.2,
-                        fontWeight: selezionata ? FontWeight.w800 : FontWeight.w700,
                       ),
+                    ),
+                    AnimatedScale(
+                      scale: selezionata ? 1 : 0,
+                      duration: durata(context, 200),
+                      curve: Curves.easeOutBack,
+                      child: Icon(Icons.check_circle_rounded, color: accento.forte, size: 20),
                     ),
                   ],
                 ),
@@ -1560,10 +1400,18 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
       ('alta', 'Alta', 'High', corallo),
     ];
 
-    return Row(
+    // Un unico selettore a tre segmenti: il colore resta solo sul puntino e sulla scelta.
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: superficie,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: bordo),
+      ),
+      child: Row(
       children: [
         for (final (i, livello) in livelli.indexed) ...[
-          if (i > 0) const SizedBox(width: 8),
+          if (i > 0) const SizedBox(width: 4),
           Expanded(
             child: Builder(builder: (context) {
               final selezionata = _gravita == livello.$1;
@@ -1577,17 +1425,17 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
                 child: AnimatedContainer(
                   duration: durata(context, 180),
                   decoration: BoxDecoration(
-                    color: selezionata ? livello.$4.withValues(alpha: .14) : superficie,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: selezionata ? livello.$4 : bordo, width: selezionata ? 1.8 : 1),
+                    color: selezionata ? livello.$4.withValues(alpha: .14) : Colors.transparent,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: selezionata ? livello.$4 : Colors.transparent, width: 1.5),
                   ),
                   child: Material(
                     type: MaterialType.transparency,
                     child: InkWell(
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(12),
                       onTap: () => setState(() => _gravita = livello.$1),
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 6),
+                        padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 6),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
@@ -1626,6 +1474,7 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
           ),
         ],
       ],
+      ),
     );
   }
 
@@ -1639,10 +1488,10 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
         ),
         LayoutBuilder(
           builder: (builderContext, constraints) {
-            final larghezza = (constraints.maxWidth - 12) / 2;
+            final larghezza = (constraints.maxWidth - 10) / 2;
             return Wrap(
-              spacing: 12,
-              runSpacing: 12,
+              spacing: 10,
+              runSpacing: 10,
               children: _categorie
                   .map((categoria) => SizedBox(width: larghezza, child: _schedaCategoria(categoria, s)))
                   .toList(),
@@ -1655,17 +1504,27 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
           s.t('Se non sei sicuro, lascia «Media».', 'If unsure, leave “Medium”.'),
         ),
         _selettoreGravita(s),
-        const SizedBox(height: 20),
-        Riquadro(
-          icona: Icons.shield_outlined,
-          messaggio: s.t(
-            'La segnalazione è anonima. Non fotografare persone e non scrivere dati personali.',
-            'The report is anonymous. Do not photograph people or include personal data.',
-          ),
-        ),
+        const SizedBox(height: 18),
+        _notaPrivacy(s.t(
+          'La segnalazione è anonima. Non fotografare persone e non scrivere dati personali.',
+          'The report is anonymous. Do not photograph people or include personal data.',
+        )),
       ],
     );
   }
+
+  /// Nota discreta in piccolo: un'informazione, non un avviso.
+  Widget _notaPrivacy(String messaggio) => Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(top: 1),
+            child: Icon(Icons.shield_outlined, size: 17, color: testoTenue),
+          ),
+          const SizedBox(width: 8),
+          Expanded(child: Text(messaggio, style: const TextStyle(fontSize: 13, height: 1.4, color: testoSecondario))),
+        ],
+      );
 
   // ── Passaggio 2: foto e luogo ──────────────────────────────────────────────
 
@@ -1682,13 +1541,13 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
   /// Riquadro grande e toccabile per scegliere la foto: icona sopra, testo sotto
   /// su una sola riga (si rimpicciolisce invece di andare a capo).
   Widget _opzioneFoto(IconData icona, String etichetta, VoidCallback onTap, {bool principale = false}) {
-    final colore = principale ? Colors.white : cieloScuro;
+    final colore = principale ? Colors.white : foresta;
     return Semantics(
       button: true,
       label: etichetta,
       excludeSemantics: true,
       child: Material(
-        color: principale ? cieloScuro : cieloChiaro,
+        color: principale ? foresta : menta,
         borderRadius: BorderRadius.circular(18),
         child: InkWell(
           onTap: onTap,
@@ -1775,7 +1634,7 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _intestazioneScheda(
           Icons.photo_camera_rounded,
-          Accento.blu,
+          Accento.neutro,
           s.t('Aggiungi una foto', 'Add a photo'),
           Etichetta(s.t('Facoltativa', 'Optional'), colore: testoSecondario, sfondo: sfondo),
         ),
@@ -1977,7 +1836,7 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
             children: [
               Text(s.t('La tua segnalazione', 'Your report'), style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: testo)),
               const SizedBox(height: 14),
-              _rigaRiepilogo(s.t('Categoria', 'Category'), s.t(categoria.nomeIt, categoria.nomeEn), categoria.icona, categoria.accento),
+              _rigaRiepilogo(s.t('Categoria', 'Category'), s.t(categoria.nomeIt, categoria.nomeEn), categoria.icona, Accento.neutro),
               const Divider(height: 22),
               _rigaRiepilogo(
                 s.t('Urgenza', 'Urgency'),
@@ -1993,7 +1852,7 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
                 s.t('Foto', 'Photo'),
                 _foto != null ? s.t('Allegata', 'Attached') : s.t('Nessuna', 'None'),
                 Icons.photo_outlined,
-                Accento.blu,
+                Accento.neutro,
               ),
               const Divider(height: 22),
               _rigaRiepilogo(
@@ -2076,25 +1935,45 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
     );
   }
 
+  /// Barra fissa in fondo con Indietro / Continua: non serve scorrere per andare avanti.
+  Widget _barraAzioni(Copie s) => DecoratedBox(
+        decoration: const BoxDecoration(
+          color: sfondo,
+          border: Border(top: BorderSide(color: bordo)),
+        ),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 760),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(margineLaterale, 10, margineLaterale, 10),
+              child: _pulsanti(s),
+            ),
+          ),
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
     final s = widget.s;
     final animazioni = !MediaQuery.of(context).disableAnimations;
+    final nomi = _nomiPassaggi(s);
 
-    return ContenitorePagina(
-      child: Column(
+    return Column(
+      children: [
+        Expanded(
+          child: ContenitorePagina(
+            controller: _scorrimento,
+            child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           TitoloPagina(
             titolo: s.t('Segnala un problema', 'Report a problem'),
-            icona: Icons.add_a_photo_rounded,
+            descrizione: s.t('Passo ${_passaggio + 1} di 3 · ${nomi[_passaggio]}', 'Step ${_passaggio + 1} of 3 · ${nomi[_passaggio]}'),
+            icona: Icons.add_location_alt_rounded,
             accento: Accento.arancio,
           ),
-          Scheda(
-            padding: const EdgeInsets.fromLTRB(12, 16, 12, 14),
-            child: _indicatorePassaggi(s),
-          ),
-          const SizedBox(height: 24),
+          _barraAvanzamento(s),
+          const SizedBox(height: 22),
           AnimatedSwitcher(
             duration: durata(context, 280),
             switchInCurve: Curves.easeOutCubic,
@@ -2134,10 +2013,12 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
                     ),
                   ),
           ),
-          const SizedBox(height: 22),
-          _pulsanti(s),
         ],
-      ),
+            ),
+          ),
+        ),
+        _barraAzioni(s),
+      ],
     );
   }
 }
@@ -2147,14 +2028,11 @@ class _CategoriaSegnalazione {
   final String nomeIt;
   final String nomeEn;
   final IconData icona;
-  final Accento accento;
-
   const _CategoriaSegnalazione({
     required this.id,
     required this.nomeIt,
     required this.nomeEn,
     required this.icona,
-    required this.accento,
   });
 
   // Icone Material indicate dal backend (campo `icon` di /citizen/categories).
@@ -2184,22 +2062,6 @@ class _CategoriaSegnalazione {
     'other': 'Other',
   };
 
-  /// Colore di ogni categoria nota; le altre ricevono un colore stabile dal codice.
-  static const Map<String, Accento> _accenti = {
-    'lighting': Accento.giallo,
-    'waste': Accento.blu,
-    'green': Accento.verde,
-    'irrigation': Accento.blu,
-    'fountains': Accento.blu,
-    'furniture': Accento.arancio,
-    'cleaning': Accento.viola,
-    'safety': Accento.arancio,
-    'play': Accento.giallo,
-    'other': Accento.viola,
-  };
-
-  static const List<Accento> _ciclo = [Accento.verde, Accento.blu, Accento.giallo, Accento.arancio, Accento.viola];
-
   factory _CategoriaSegnalazione.fromBackend(Map<String, dynamic> json) {
     final code = json['code'] as String;
     final label = json['label'] as String? ?? code;
@@ -2208,7 +2070,6 @@ class _CategoriaSegnalazione {
       nomeIt: label,
       nomeEn: _nomiEn[code] ?? label,
       icona: _icone[json['icon']] ?? Icons.label_outline_rounded,
-      accento: _accenti[code] ?? _ciclo[code.codeUnits.fold<int>(0, (a, b) => a + b) % _ciclo.length],
     );
   }
 }
