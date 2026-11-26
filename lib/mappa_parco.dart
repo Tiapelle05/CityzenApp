@@ -130,6 +130,11 @@ class LivelloGruppi<T> extends StatelessWidget {
   final bool Function(T dato)? scelto;
   final String Function(int quanti)? etichettaGruppo;
 
+  /// Identità di un elemento (per esempio l'id). Ogni segnaposto la tiene come
+  /// chiave: quando la scelta cambia e l'ordine di disegno si sposta, le
+  /// animazioni restano al loro segnaposto invece di passare a un vicino.
+  final Object? Function(T dato)? chiave;
+
   const LivelloGruppi({
     super.key,
     required this.punti,
@@ -137,7 +142,10 @@ class LivelloGruppi<T> extends StatelessWidget {
     this.onGruppo,
     this.scelto,
     this.etichettaGruppo,
+    this.chiave,
   });
+
+  Object? _chiaveDi(T dato) => chiave == null ? dato : chiave!(dato);
 
   /// Distanza minima in pixel sotto la quale due segnaposto si uniscono.
   static const double soglia = 46;
@@ -180,6 +188,7 @@ class LivelloGruppi<T> extends StatelessWidget {
         for (final g in gruppi)
           if (g.length == 1)
             Marker(
+              key: ValueKey(('uno', _chiaveDi(g.first.$1))),
               point: g.first.$2,
               width: Segnaposto.dimensione,
               height: Segnaposto.dimensione,
@@ -187,6 +196,7 @@ class LivelloGruppi<T> extends StatelessWidget {
             )
           else
             Marker(
+              key: ValueKey(('gruppo', g.map((e) => '${_chiaveDi(e.$1)}').join('|'))),
               point: LatLng(
                 g.map((e) => e.$2.latitude).reduce((a, b) => a + b) / g.length,
                 g.map((e) => e.$2.longitude).reduce((a, b) => a + b) / g.length,
@@ -423,6 +433,7 @@ class _AnteprimaMappaState extends State<AnteprimaMappa> {
                 livelli: [
                   LivelloGruppi<Map<String, dynamic>>(
                     punti: punti,
+                    chiave: (r) => r['id'],
                     segnaposto: (r) => Segnaposto(
                       icona: iconaCategoria(r['category'] as String?),
                       colore: coloreStatoSegnalazione(r['status'] as String?),

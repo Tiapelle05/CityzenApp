@@ -1038,6 +1038,7 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
             LivelloGruppi<Map<String, dynamic>>(
               punti: conPosizione,
               scelto: (r) => r['id'] == _selezionata,
+              chiave: (r) => r['id'],
               etichettaGruppo: (n) => s.t('$n segnalazioni vicine, tocca per vederle', '$n nearby reports, tap to see them'),
               onGruppo: _apriGruppo,
               segnaposto: (r) => Semantics(
