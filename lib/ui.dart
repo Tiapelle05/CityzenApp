@@ -734,6 +734,21 @@ class PulsanteAzione extends StatelessWidget {
   }
 }
 
+/// Data detta a parole rispetto a oggi: «oggi», «ieri», «3 giorni fa»,
+/// «domani», «tra 2 giorni»; oltre la settimana torna «gg/mm».
+String dataRelativa(DateTime d, Copie s, {DateTime? adesso}) {
+  final ora = adesso ?? DateTime.now();
+  final giorni = DateTime(d.year, d.month, d.day).difference(DateTime(ora.year, ora.month, ora.day)).inDays;
+  return switch (giorni) {
+    0 => s.t('oggi', 'today'),
+    -1 => s.t('ieri', 'yesterday'),
+    1 => s.t('domani', 'tomorrow'),
+    < 0 && >= -6 => s.t('${-giorni} giorni fa', '${-giorni} days ago'),
+    > 1 && <= 6 => s.t('tra $giorni giorni', 'in $giorni days'),
+    _ => formattaData(d),
+  };
+}
+
 /// Formatta una data ISO come "gg/mm" (o "gg/mm hh:mm" con [ora]).
 String formattaData(dynamic iso, {bool ora = false}) {
   final d = iso is DateTime ? iso : DateTime.tryParse(iso?.toString() ?? '')?.toLocal();

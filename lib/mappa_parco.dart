@@ -292,8 +292,9 @@ class AnimatoreMappa {
   void dispose() => _anim.dispose();
 }
 
-/// Segnaposto rotondo con icona, nel colore indicato.
-class Segnaposto extends StatelessWidget {
+/// Segnaposto rotondo con icona, nel colore indicato. Compare con una
+/// piccola caduta e, quando è scelto, un anello pulsa attorno.
+class Segnaposto extends StatefulWidget {
   final IconData icona;
   final Color colore;
   final bool selezionato;
@@ -303,23 +304,98 @@ class Segnaposto extends StatelessWidget {
   static const double dimensione = 46;
 
   @override
+  State<Segnaposto> createState() => _SegnapostoState();
+}
+
+class _SegnapostoState extends State<Segnaposto> with SingleTickerProviderStateMixin {
+  AnimationController? _pulsazione;
+
+  bool get _animazioni => !MediaQuery.of(context).disableAnimations;
+
+  void _aggiornaPulsazione() {
+    if (widget.selezionato && _animazioni) {
+      (_pulsazione ??= AnimationController(vsync: this, duration: const Duration(milliseconds: 1400))).repeat();
+    } else {
+      _pulsazione?.stop();
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _aggiornaPulsazione();
+  }
+
+  @override
+  void didUpdateWidget(Segnaposto vecchio) {
+    super.didUpdateWidget(vecchio);
+    if (vecchio.selezionato != widget.selezionato) _aggiornaPulsazione();
+  }
+
+  @override
+  void dispose() {
+    _pulsazione?.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final selezionato = widget.selezionato;
+    // Al buio i colori di stato sono chiari: il segnaposto resta pieno e scuro
+    // quanto basta perché l'icona bianca si legga.
+    var colore = widget.colore;
+    if (temaScuro) {
+      final hsl = HSLColor.fromColor(colore);
+      if (hsl.lightness > .45) colore = hsl.withLightness(.42).toColor();
+    }
     final lato = selezionato ? 42.0 : 34.0;
+    final pallino = AnimatedContainer(
+      duration: durata(context, 200),
+      curve: Curves.easeOutBack,
+      width: lato,
+      height: lato,
+      decoration: BoxDecoration(
+        color: colore,
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: selezionato ? 3.5 : 2.5),
+        boxShadow: [
+          BoxShadow(color: colore.withValues(alpha: .45), blurRadius: selezionato ? 14 : 8, offset: const Offset(0, 3)),
+        ],
+      ),
+      child: Icon(widget.icona, color: Colors.white, size: selezionato ? 22 : 18),
+    );
+    final pulsazione = _pulsazione;
     return Center(
-      child: AnimatedContainer(
-        duration: durata(context, 200),
-        curve: Curves.easeOutBack,
-        width: lato,
-        height: lato,
-        decoration: BoxDecoration(
-          color: colore,
-          shape: BoxShape.circle,
-          border: Border.all(color: Colors.white, width: selezionato ? 3.5 : 2.5),
-          boxShadow: [
-            BoxShadow(color: colore.withValues(alpha: .45), blurRadius: selezionato ? 14 : 8, offset: const Offset(0, 3)),
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0, end: 1),
+        duration: durata(context, 520),
+        curve: Curves.elasticOut,
+        builder: (context, v, figlio) => Transform.translate(
+          offset: Offset(0, -18 * (1 - v.clamp(0, 1))),
+          child: Transform.scale(scale: .4 + .6 * v, child: figlio),
+        ),
+        child: Stack(
+          alignment: Alignment.center,
+          clipBehavior: Clip.none,
+          children: [
+            if (selezionato && pulsazione != null)
+              AnimatedBuilder(
+                animation: pulsazione,
+                builder: (context, _) {
+                  final t = Curves.easeOut.transform(pulsazione.value);
+                  return Container(
+                    width: lato * (1 + t * .9),
+                    height: lato * (1 + t * .9),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: colore.withValues(alpha: (1 - t) * .7), width: 3),
+                    ),
+                  );
+                },
+              ),
+            pallino,
           ],
         ),
-        child: Icon(icona, color: Colors.white, size: selezionato ? 22 : 18),
       ),
     );
   }

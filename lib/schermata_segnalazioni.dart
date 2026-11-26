@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show HapticFeedback;
 
 import 'citizen_api.dart';
 import 'mappa_parco.dart';
@@ -321,6 +322,8 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      const SizedBox(height: 14),
+                      CronologiaStato(stato: _statoDi(r), s: s),
                       if (testoDescr.isNotEmpty) ...[
                         const SizedBox(height: 10),
                         Text(testoDescr, style: TextStyle(fontSize: 14.5, color: testo, height: 1.45)),
@@ -677,7 +680,13 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
     }
     return SizedBox(
       height: _altezzaFiltri,
-      child: ListView(
+      child: ShaderMask(
+        blendMode: BlendMode.dstIn,
+        shaderCallback: (r) => const LinearGradient(
+          colors: [Colors.black, Colors.black, Colors.transparent],
+          stops: [0, .88, 1],
+        ).createShader(r),
+        child: ListView(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
         clipBehavior: Clip.none,
@@ -688,10 +697,47 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
             Center(child: _chipStato(stato, s.t(it, en), conteggi[stato] ?? 0)),
             const SizedBox(width: 6),
           ],
+          const SizedBox(width: 30),
         ],
+        ),
       ),
     );
   }
+
+  /// Riporta la mappa a inquadrare tutte le segnalazioni visibili.
+  void _ricentra(List<(Map<String, dynamic>, LatLng)> punti) {
+    final MapCamera cam;
+    try {
+      cam = _mappa.camera;
+    } catch (_) {
+      return;
+    }
+    if (punti.isEmpty) {
+      _volo.vola(MappaParco.centroParco(), 16, animato: _animazioni);
+      return;
+    }
+    final adatta = CameraFit.coordinates(
+      coordinates: [for (final e in punti) e.$2],
+      padding: EdgeInsets.fromLTRB(48, _altezzaFiltri + 40, 48, _foglioPx + 30),
+      maxZoom: 17,
+    ).fit(cam);
+    _volo.vola(adatta.center, adatta.zoom, animato: _animazioni);
+  }
+
+  Widget _pulsanteRicentra(Copie s, List<(Map<String, dynamic>, LatLng)> punti) => Material(
+        color: superficie,
+        shape: const CircleBorder(),
+        elevation: 3,
+        shadowColor: Colors.black.withValues(alpha: .3),
+        child: IconButton(
+          tooltip: s.t('Mostra tutte le segnalazioni', 'Show all reports'),
+          onPressed: () {
+            HapticFeedback.selectionClick();
+            _ricentra(punti);
+          },
+          icon: Icon(Icons.center_focus_strong_rounded, color: cieloScuro),
+        ),
+      );
 
   // ── Pannello ──────────────────────────────────────────────────────────────
 
@@ -886,6 +932,7 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
               ],
             ),
             Positioned(top: 0, left: 0, right: 0, child: _barraFiltri(s)),
+            Positioned(right: 12, top: _altezzaFiltri + 30, child: _pulsanteRicentra(s, conPosizione)),
             DraggableScrollableSheet(
               controller: _foglio,
               minChildSize: minimo,
@@ -898,6 +945,112 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
           ],
         );
       },
+    );
+  }
+}
+
+/// Avanzamento di una segnalazione: Ricevuta → In corso → Risolta (o Chiusa).
+/// La linea si riempie fino allo stato attuale.
+class CronologiaStato extends StatelessWidget {
+  final String stato;
+  final Copie s;
+  const CronologiaStato({super.key, required this.stato, required this.s});
+
+  @override
+  Widget build(BuildContext context) {
+    final chiusa = stato == 'closed';
+    final passi = [
+      ('received', s.t('Ricevuta', 'Received'), Icons.inbox_rounded),
+      ('in_progress', s.t('In corso', 'In progress'), Icons.construction_rounded),
+      chiusa
+          ? ('closed', s.t('Chiusa', 'Closed'), Icons.lock_rounded)
+          : ('resolved', s.t('Risolta', 'Resolved'), Icons.check_rounded),
+    ];
+    final attuale = switch (stato) {
+      'in_progress' => 1,
+      'resolved' || 'closed' => 2,
+      _ => 0,
+    };
+    final colore = coloreStatoSegnalazione(stato);
+    return Semantics(
+      label: s.t('Stato: ${passi[attuale].$2}', 'Status: ${passi[attuale].$2}'),
+      excludeSemantics: true,
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0, end: attuale / 2),
+        duration: durata(context, 700),
+        curve: Curves.easeInOutCubic,
+        builder: (context, avanzamento, _) => LayoutBuilder(
+          builder: (context, vincoli) {
+            const d = 26.0;
+            final tratto = vincoli.maxWidth - d;
+            return Column(
+              children: [
+                SizedBox(
+                  height: d,
+                  child: Stack(
+                    children: [
+                      Positioned(
+                        left: d / 2,
+                        right: d / 2,
+                        top: d / 2 - 2,
+                        height: 4,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(color: bordo, borderRadius: BorderRadius.circular(2)),
+                        ),
+                      ),
+                      Positioned(
+                        left: d / 2,
+                        top: d / 2 - 2,
+                        height: 4,
+                        width: tratto * avanzamento,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(color: colore, borderRadius: BorderRadius.circular(2)),
+                        ),
+                      ),
+                      for (final (i, passo) in passi.indexed)
+                        Positioned(
+                          left: tratto * i / 2,
+                          child: AnimatedContainer(
+                            duration: durata(context, 300),
+                            width: d,
+                            height: d,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: avanzamento * 2 >= i - .01 ? colore : superficie,
+                              border: Border.all(color: avanzamento * 2 >= i - .01 ? colore : bordoForte, width: 2),
+                            ),
+                            child: Icon(
+                              passo.$3,
+                              size: 14,
+                              color: avanzamento * 2 >= i - .01 ? Colors.white : testoTenue,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Row(
+                  children: [
+                    for (final (i, passo) in passi.indexed)
+                      Expanded(
+                        child: Text(
+                          passo.$2,
+                          textAlign: i == 0 ? TextAlign.start : i == 1 ? TextAlign.center : TextAlign.end,
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: i == attuale ? FontWeight.w800 : FontWeight.w600,
+                            color: i == attuale ? colore : testoSecondario,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            );
+          },
+        ),
+      ),
     );
   }
 }

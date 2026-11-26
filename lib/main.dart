@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -1438,6 +1439,16 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
   final TextEditingController _descrizione = TextEditingController();
 
   int _passaggio = 0;
+  /// 1 avanti, -1 indietro: i passaggi scorrono nella direzione giusta.
+  int _versoPassaggio = 1;
+  /// Cima della pagina: a ogni cambio di passaggio si torna lì.
+  final GlobalKey _cima = GlobalKey();
+
+  void _tornaInCima() => WidgetsBinding.instance.addPostFrameCallback((_) {
+        final ctx = _cima.currentContext;
+        if (ctx == null || !ctx.mounted) return;
+        Scrollable.ensureVisible(ctx, duration: durata(ctx, 320), curve: Curves.easeOutCubic);
+      });
   String? _categoria;
   String _gravita = 'media';
   String? _errore;
@@ -1524,8 +1535,10 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
     if (_passaggio < 2) {
       setState(() {
         _errore = null;
+        _versoPassaggio = 1;
         _passaggio++;
       });
+      _tornaInCima();
       // La posizione si cerca da sola: l'utente non deve premere nulla.
       if (_passaggio == 1 && _posizione == null && !_caricamentoGps) unawaited(_rilevaPosizione());
     } else {
@@ -1537,8 +1550,10 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
     if (_passaggio > 0) {
       setState(() {
         _errore = null;
+        _versoPassaggio = -1;
         _passaggio--;
       });
+      _tornaInCima();
     }
   }
 
@@ -1609,7 +1624,10 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
     final s = widget.s;
     if (_posizione == null) {
       _mostraErrore(s.t('Manca la posizione: tocca «Trova la mia posizione».', 'The location is missing: tap “Find my location”.'));
-      setState(() => _passaggio = 1);
+      setState(() {
+        _versoPassaggio = -1;
+        _passaggio = 1;
+      });
       return;
     }
     setState(() { _invioInCorso = true; _errore = null; });
@@ -1631,63 +1649,16 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
         photoName: _foto?.name,
       );
       if (!mounted) return;
-      final vediMappa = await showDialog<bool>(
-        context: context,
-        barrierDismissible: false,
-        builder: (dialogContext) => AlertDialog(
-          icon: CircleAvatar(radius: 34, backgroundColor: menta, child: Icon(Icons.check_rounded, color: foresta, size: 40)),
-          title: Text(s.t('Segnalazione inviata', 'Report submitted')),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                s.t('Grazie! Il tuo aiuto rende il parco un posto migliore.', 'Thank you! Your help makes the park a better place.'),
-                textAlign: TextAlign.center,
-                style: TextStyle(color: testoSecondario, height: 1.4),
-              ),
-              const SizedBox(height: 16),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(color: sfondo, borderRadius: BorderRadius.circular(14)),
-                child: Column(
-                  children: [
-                    Text(
-                      '${s.t('Numero segnalazione', 'Report number')}: ${result['code'] ?? result['id']}',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
-                    ),
-                    if ((result['status_label'] ?? '').toString().isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      Text('${result['status_label']}', style: TextStyle(color: testoSecondario)),
-                    ],
-                  ],
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            if (widget.onInviata != null) ...[
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: () => Navigator.of(dialogContext).pop(true),
-                  icon: const Icon(Icons.map_rounded),
-                  label: Text(s.t('Vedi sulla mappa', 'See it on the map')),
-                ),
-              ),
-              const SizedBox(height: 4),
-            ],
-            SizedBox(
-              width: double.infinity,
-              child: TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: Text(s.t('Chiudi', 'Close'))),
-            ),
-          ],
-        ),
+      final vediMappa = await mostraSegnalazioneInviata(
+        context,
+        s: s,
+        codice: '${result['code'] ?? result['id']}',
+        stato: result['status_label']?.toString(),
+        conMappa: widget.onInviata != null,
       );
       if (!mounted) return;
       setState(() {
-        _passaggio = 0; _categoria = null; _gravita = 'media';
+        _passaggio = 0; _versoPassaggio = -1; _categoria = null; _gravita = 'media';
         _descrizione.clear(); _errore = null; _foto = null; _anteprimaFoto = null; _posizione = null;
       });
       if (vediMappa == true) widget.onInviata?.call();
@@ -1707,12 +1678,23 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
       s.t('Invia', 'Send'),
     ];
 
-    Widget linea(bool attiva) => AnimatedContainer(
-          duration: durata(context, 300),
-          height: 3,
-          decoration: BoxDecoration(
-            color: attiva ? foresta : bordo,
-            borderRadius: BorderRadius.circular(3),
+    Widget linea(bool attiva) => ClipRRect(
+          borderRadius: BorderRadius.circular(3),
+          child: SizedBox(
+            height: 4,
+            child: Stack(
+              children: [
+                Positioned.fill(child: ColoredBox(color: bordo)),
+                AnimatedFractionallySizedBox(
+                  duration: durata(context, 420),
+                  curve: Curves.easeInOutCubic,
+                  widthFactor: attiva ? 1 : 0,
+                  heightFactor: 1,
+                  alignment: _versoPassaggio > 0 ? Alignment.centerLeft : Alignment.centerRight,
+                  child: ColoredBox(color: foresta),
+                ),
+              ],
+            ),
           ),
         );
 
@@ -1727,19 +1709,25 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
           shape: BoxShape.circle,
           color: completato || corrente ? foresta : superficie,
           border: Border.all(color: completato || corrente ? foresta : bordoForte, width: 1.5),
-          boxShadow: corrente ? [const BoxShadow(color: Color(0x5517694A), blurRadius: 0, spreadRadius: 4)] : null,
+          boxShadow: corrente ? [BoxShadow(color: foresta.withValues(alpha: .33), blurRadius: 0, spreadRadius: 4)] : null,
         ),
         child: Center(
-          child: completato
-              ? const Icon(Icons.check_rounded, size: 19, color: Colors.white)
-              : Text(
-                  '${i + 1}',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                    color: corrente ? Colors.white : testoSecondario,
+          child: AnimatedSwitcher(
+            duration: durata(context, 320),
+            switchInCurve: Curves.easeOutBack,
+            transitionBuilder: (figlio, a) => ScaleTransition(scale: a, child: figlio),
+            child: completato
+                ? const Icon(Icons.check_rounded, key: ValueKey('fatto'), size: 19, color: Colors.white)
+                : Text(
+                    '${i + 1}',
+                    key: ValueKey('n$i'),
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: corrente ? Colors.white : testoSecondario,
+                    ),
                   ),
-                ),
+          ),
         ),
       );
     }
@@ -1821,9 +1809,14 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
     final accento = categoria.accento;
 
     void selezionaCategoria() {
+      HapticFeedback.selectionClick();
       setState(() {
         _categoria = categoria.id;
         _errore = null;
+      });
+      // Scelta fatta: si passa da soli al passaggio successivo.
+      Future<void>.delayed(durata(context, 380), () {
+        if (mounted && _passaggio == 0 && _categoria == categoria.id) _vaiAvanti();
       });
     }
 
@@ -1838,61 +1831,67 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
       ),
       onTap: selezionaCategoria,
       child: ExcludeSemantics(
-        child: AnimatedContainer(
-          duration: durata(context, 180),
-          decoration: BoxDecoration(
-            color: selezionata ? accento.tinta : superficie,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: selezionata ? accento.base : bordo,
-              width: selezionata ? 2 : 1,
-            ),
-            boxShadow: selezionata
-                ? [BoxShadow(color: accento.base.withValues(alpha: .18), blurRadius: 14, offset: const Offset(0, 6))]
-                : const [BoxShadow(color: Color(0x0A12261B), blurRadius: 10, offset: Offset(0, 4))],
-          ),
-          child: Material(
-            type: MaterialType.transparency,
-            child: InkWell(
-              onTap: selezionaCategoria,
+        child: Premibile(
+          onTap: selezionaCategoria,
+          child: AnimatedContainer(
+            duration: durata(context, 220),
+            curve: Curves.easeOutCubic,
+            height: 104,
+            padding: const EdgeInsets.fromLTRB(8, 12, 8, 10),
+            decoration: BoxDecoration(
+              color: selezionata ? accento.tinta : superficie,
               borderRadius: BorderRadius.circular(20),
-              child: Container(
-                constraints: const BoxConstraints(minHeight: 112),
-                padding: const EdgeInsets.all(14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              border: Border.all(
+                color: selezionata ? accento.base : bordo,
+                width: selezionata ? 2 : 1,
+              ),
+              boxShadow: selezionata
+                  ? [BoxShadow(color: accento.base.withValues(alpha: .22), blurRadius: 16, offset: const Offset(0, 6))]
+                  : [BoxShadow(color: ombra, blurRadius: 10, offset: const Offset(0, 4))],
+            ),
+            child: Stack(
+              fit: StackFit.expand,
+              clipBehavior: Clip.none,
+              children: [
+                Column(
                   children: [
-                    Row(
-                      children: [
-                        IconaTonda(
-                          categoria.icona,
-                          colore: accento.forte,
-                          sfondo: selezionata ? superficie : accento.tinta,
-                          dimensione: 42,
-                        ),
-                        const Spacer(),
-                        AnimatedScale(
-                          scale: selezionata ? 1 : 0,
-                          duration: durata(context, 200),
-                          curve: Curves.easeOutBack,
-                          child: Icon(Icons.check_circle_rounded, color: accento.forte, size: 24),
-                        ),
-                      ],
+                    AnimatedScale(
+                      scale: selezionata ? 1.14 : 1,
+                      duration: durata(context, 320),
+                      curve: Curves.easeOutBack,
+                      child: IconaTonda(
+                        categoria.icona,
+                        colore: accento.forte,
+                        sfondo: selezionata ? superficie : accento.tinta,
+                        dimensione: 42,
+                      ),
                     ),
-                    const SizedBox(height: 12),
+                    const Spacer(),
                     Text(
                       nome,
+                      maxLines: 2,
+                      textAlign: TextAlign.center,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         color: testo,
-                        fontSize: 15,
-                        height: 1.2,
+                        fontSize: 13,
+                        height: 1.15,
                         fontWeight: selezionata ? FontWeight.w800 : FontWeight.w700,
                       ),
                     ),
                   ],
                 ),
-              ),
+                Positioned(
+                  top: -4,
+                  right: -2,
+                  child: AnimatedScale(
+                    scale: selezionata ? 1 : 0,
+                    duration: durata(context, 260),
+                    curve: Curves.easeOutBack,
+                    child: Icon(Icons.check_circle_rounded, color: accento.forte, size: 20),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -1986,22 +1985,18 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
         ),
         LayoutBuilder(
           builder: (builderContext, constraints) {
-            final larghezza = (constraints.maxWidth - 12) / 2;
+            final colonne = constraints.maxWidth < 330 ? 2 : 3;
+            final larghezza = (constraints.maxWidth - 10 * (colonne - 1)) / colonne;
             return Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: _categorie
-                  .map((categoria) => SizedBox(width: larghezza, child: _schedaCategoria(categoria, s)))
-                  .toList(),
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                for (final (i, categoria) in _categorie.indexed)
+                  SizedBox(width: larghezza, child: Appare(indice: i, child: _schedaCategoria(categoria, s))),
+              ],
             );
           },
         ),
-        const SizedBox(height: 24),
-        _etichettaCampo(
-          s.t('Quanto è urgente?', 'How urgent is it?'),
-          s.t('Se non sei sicuro, lascia «Media».', 'If unsure, leave “Medium”.'),
-        ),
-        _selettoreGravita(s),
         const SizedBox(height: 20),
         Riquadro(
           icona: Icons.shield_outlined,
@@ -2298,6 +2293,12 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
           s.t('Ci siamo quasi!', 'Almost done!'),
           s.t('Se vuoi, aggiungi due parole. Poi tocca «Invia segnalazione».', 'Add a few words if you like, then tap “Send report”.'),
         ),
+        _etichettaCampo(
+          s.t('Quanto è urgente?', 'How urgent is it?'),
+          s.t('Se non sei sicuro, lascia «Media».', 'If unsure, leave “Medium”.'),
+        ),
+        _selettoreGravita(s),
+        const SizedBox(height: 20),
         _etichettaCampo(s.t('Vuoi aggiungere qualcosa? (facoltativo)', 'Anything to add? (optional)')),
         TextField(
           controller: _descrizione,
@@ -2433,6 +2434,7 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           TitoloPagina(
+            key: _cima,
             titolo: s.t('Segnala un problema', 'Report a problem'),
             icona: Icons.add_a_photo_rounded,
             accento: Accento.arancio,
@@ -2443,18 +2445,23 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
           ),
           const SizedBox(height: 24),
           AnimatedSwitcher(
-            duration: durata(context, 280),
+            duration: durata(context, 340),
             switchInCurve: Curves.easeOutCubic,
-            switchOutCurve: Curves.easeIn,
-            transitionBuilder: (child, animation) => FadeTransition(
-              opacity: animation,
-              child: animazioni
-                  ? SlideTransition(
-                      position: Tween<Offset>(begin: const Offset(.04, 0), end: Offset.zero).animate(animation),
-                      child: child,
-                    )
-                  : child,
-            ),
+            switchOutCurve: Curves.easeInCubic,
+            transitionBuilder: (child, animation) {
+              // Il nuovo passaggio entra dal lato verso cui si va, il vecchio esce dall'altro.
+              final entrante = child.key == ValueKey<int>(_passaggio);
+              final verso = (entrante ? 1 : -1) * _versoPassaggio;
+              return FadeTransition(
+                opacity: animation,
+                child: animazioni
+                    ? SlideTransition(
+                        position: Tween<Offset>(begin: Offset(.18 * verso, 0), end: Offset.zero).animate(animation),
+                        child: child,
+                      )
+                    : child,
+              );
+            },
             layoutBuilder: (corrente, precedenti) => Stack(
               alignment: Alignment.topCenter,
               children: [...precedenti, ?corrente],
@@ -2558,6 +2565,316 @@ class _CategoriaSegnalazione {
       accento: _accenti[code] ?? _ciclo[code.codeUnits.fold<int>(0, (a, b) => a + b) % _ciclo.length],
     );
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Segnalazione inviata
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Mostra la schermata di ringraziamento dopo l'invio. Restituisce `true` se
+/// l'utente vuole vedere la segnalazione sulla mappa.
+Future<bool?> mostraSegnalazioneInviata(
+  BuildContext context, {
+  required Copie s,
+  required String codice,
+  String? stato,
+  bool conMappa = true,
+}) {
+  return Navigator.of(context, rootNavigator: true).push<bool>(
+    PageRouteBuilder<bool>(
+      transitionDuration: durata(context, 420),
+      reverseTransitionDuration: durata(context, 260),
+      pageBuilder: (_, _, _) => SchermataInviata(s: s, codice: codice, stato: stato, conMappa: conMappa),
+      transitionsBuilder: (_, a, _, figlio) {
+        final curva = CurvedAnimation(parent: a, curve: Curves.easeOutCubic);
+        return FadeTransition(
+          opacity: curva,
+          child: ScaleTransition(scale: Tween<double>(begin: .94, end: 1).animate(curva), child: figlio),
+        );
+      },
+    ),
+  );
+}
+
+class SchermataInviata extends StatefulWidget {
+  final Copie s;
+  final String codice;
+  final String? stato;
+  final bool conMappa;
+  const SchermataInviata({super.key, required this.s, required this.codice, this.stato, this.conMappa = true});
+
+  @override
+  State<SchermataInviata> createState() => _SchermataInviataState();
+}
+
+class _SchermataInviataState extends State<SchermataInviata> with TickerProviderStateMixin {
+  /// Disegno del segno di spunta (cerchio, poi la spunta).
+  late final AnimationController _spunta = AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
+  /// Foglie che cadono, una volta sola.
+  late final AnimationController _foglie = AnimationController(vsync: this, duration: const Duration(milliseconds: 3200));
+  late final List<_Foglia> _elenco = _Foglia.genera(18);
+
+  @override
+  void initState() {
+    super.initState();
+    HapticFeedback.mediumImpact();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.of(context).disableAnimations) {
+      _spunta.value = 1;
+      _foglie.value = 1;
+    } else if (!_spunta.isAnimating && _spunta.value == 0) {
+      _spunta.forward();
+      _foglie.forward();
+    }
+  }
+
+  @override
+  void dispose() {
+    _spunta.dispose();
+    _foglie.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.s;
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (fatto, _) {
+        if (!fatto) Navigator.of(context).pop(false);
+      },
+      child: Scaffold(
+        backgroundColor: sfondo,
+        body: Stack(
+          children: [
+            Positioned.fill(
+              child: IgnorePointer(
+                child: AnimatedBuilder(
+                  animation: _foglie,
+                  builder: (context, _) => CustomPaint(painter: _PittoreFoglie(_elenco, _foglie.value)),
+                ),
+              ),
+            ),
+            SafeArea(
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 460),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
+                    child: Column(
+                      children: [
+                        const Spacer(),
+                        Semantics(
+                          label: s.t('Fatto', 'Done'),
+                          child: SizedBox(
+                            width: 132,
+                            height: 132,
+                            child: AnimatedBuilder(
+                              animation: _spunta,
+                              builder: (context, _) => CustomPaint(
+                                painter: _PittoreSpunta(_spunta.value, foresta, menta),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 26),
+                        Appare(
+                          indice: 2,
+                          child: Text(
+                            s.t('Segnalazione inviata', 'Report submitted'),
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: testo, letterSpacing: -.5),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Appare(
+                          indice: 3,
+                          child: Text(
+                            s.t('Grazie! Il tuo aiuto rende il parco un posto migliore.',
+                                'Thank you! Your help makes the park a better place.'),
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 15.5, height: 1.45, color: testoSecondario),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        Appare(
+                          indice: 4,
+                          child: Scheda(
+                            padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
+                            child: Row(
+                              children: [
+                                IconaTonda(Icons.confirmation_number_rounded, colore: cieloScuro, sfondo: cieloChiaro, dimensione: 42),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(s.t('Numero segnalazione', 'Report number'),
+                                          style: TextStyle(fontSize: 12.5, color: testoSecondario)),
+                                      Text(
+                                        widget.codice,
+                                        style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: testo, letterSpacing: .3),
+                                      ),
+                                      if (widget.stato?.isNotEmpty ?? false)
+                                        Padding(
+                                          padding: const EdgeInsets.only(top: 6),
+                                          child: Etichetta(widget.stato!, colore: cieloScuro, puntino: true),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                                IconButton(
+                                  tooltip: s.t('Copia il numero', 'Copy the number'),
+                                  onPressed: () {
+                                    Clipboard.setData(ClipboardData(text: widget.codice));
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text(s.t('Numero copiato.', 'Number copied.'))),
+                                    );
+                                  },
+                                  icon: Icon(Icons.copy_rounded, color: testoSecondario),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const Spacer(flex: 2),
+                        Appare(
+                          indice: 5,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              if (widget.conMappa) ...[
+                                FilledButton.icon(
+                                  onPressed: () => Navigator.of(context).pop(true),
+                                  icon: const Icon(Icons.map_rounded),
+                                  label: Text(s.t('Vedi sulla mappa', 'See it on the map')),
+                                ),
+                                const SizedBox(height: 8),
+                              ],
+                              TextButton(
+                                onPressed: () => Navigator.of(context).pop(false),
+                                child: Text(s.t('Chiudi', 'Close')),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Cerchio che si riempie e poi la spunta che si disegna.
+class _PittoreSpunta extends CustomPainter {
+  final double t;
+  final Color colore;
+  final Color tinta;
+  _PittoreSpunta(this.t, this.colore, this.tinta);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = size.center(Offset.zero);
+    final r = size.width / 2;
+    final fondo = Curves.easeOutBack.transform((t / .45).clamp(0, 1));
+    canvas.drawCircle(c, r * fondo, Paint()..color = tinta);
+    final arco = Curves.easeInOut.transform((t / .55).clamp(0, 1));
+    canvas.drawArc(
+      Rect.fromCircle(center: c, radius: r - 5),
+      -math.pi / 2,
+      2 * math.pi * arco,
+      false,
+      Paint()
+        ..color = colore
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 7
+        ..strokeCap = StrokeCap.round,
+    );
+    final traccia = Curves.easeOut.transform(((t - .45) / .55).clamp(0, 1));
+    if (traccia == 0) return;
+    final percorso = Path()
+      ..moveTo(c.dx - r * .34, c.dy + r * .02)
+      ..lineTo(c.dx - r * .08, c.dy + r * .28)
+      ..lineTo(c.dx + r * .38, c.dy - r * .24);
+    final metrica = percorso.computeMetrics().first;
+    canvas.drawPath(
+      metrica.extractPath(0, metrica.length * traccia),
+      Paint()
+        ..color = colore
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 10
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_PittoreSpunta old) => old.t != t || old.colore != colore;
+}
+
+class _Foglia {
+  final double x, ritardo, velocita, oscillazione, giri, dimensione;
+  final Color colore;
+  const _Foglia(this.x, this.ritardo, this.velocita, this.oscillazione, this.giri, this.dimensione, this.colore);
+
+  static List<_Foglia> genera(int quante) {
+    final caso = math.Random(7);
+    const colori = [Color(0xFF2FA36B), Color(0xFF17694A), Color(0xFFF0A202), Color(0xFF7CCB8F), Color(0xFFE4572E)];
+    return [
+      for (var i = 0; i < quante; i++)
+        _Foglia(
+          caso.nextDouble(),
+          caso.nextDouble() * .35,
+          .55 + caso.nextDouble() * .45,
+          18 + caso.nextDouble() * 30,
+          (caso.nextDouble() - .5) * 3,
+          9 + caso.nextDouble() * 9,
+          colori[i % colori.length],
+        ),
+    ];
+  }
+}
+
+/// Foglie che scendono dall'alto oscillando e svaniscono.
+class _PittoreFoglie extends CustomPainter {
+  final List<_Foglia> foglie;
+  final double t;
+  _PittoreFoglie(this.foglie, this.t);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (t == 0 || t == 1) return;
+    for (final f in foglie) {
+      final p = ((t - f.ritardo) / (1 - f.ritardo)).clamp(0.0, 1.0);
+      if (p == 0) continue;
+      final y = -30 + (size.height * .75) * p * f.velocita;
+      final x = f.x * size.width + math.sin(p * math.pi * 3) * f.oscillazione;
+      final alfa = p < .8 ? 1.0 : (1 - p) / .2;
+      canvas.save();
+      canvas.translate(x, y);
+      canvas.rotate(f.giri * math.pi * p);
+      final d = f.dimensione;
+      final foglia = Path()
+        ..moveTo(0, -d)
+        ..quadraticBezierTo(d * .75, 0, 0, d)
+        ..quadraticBezierTo(-d * .75, 0, 0, -d);
+      canvas.drawPath(foglia, Paint()..color = f.colore.withValues(alpha: .85 * alfa));
+      canvas.restore();
+    }
+  }
+
+  @override
+  bool shouldRepaint(_PittoreFoglie old) => old.t != t;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2953,6 +3270,8 @@ class Avviso {
   final String descrizioneIt;
   final String descrizioneEn;
   final String data;
+  /// Inizio dell'avviso, per la data relativa («ieri», «3 giorni fa»).
+  final DateTime? quando;
 
   const Avviso({
     this.id,
@@ -2965,6 +3284,7 @@ class Avviso {
     required this.descrizioneIt,
     required this.descrizioneEn,
     required this.data,
+    this.quando,
   });
 }
 
@@ -3036,6 +3356,7 @@ class _SchermataAvvisiState extends State<SchermataAvvisi> {
           descrizioneIt: item['body'] as String? ?? '',
           descrizioneEn: item['body'] as String? ?? '',
           data: formattaData(item['starts_at']),
+          quando: DateTime.tryParse(item['starts_at']?.toString() ?? '')?.toLocal(),
         );
       }).toList();
       if (mounted) setState(() { _avvisi = parsed; _caricamento = false; _errore = null; });
@@ -3067,49 +3388,66 @@ class _SchermataAvvisiState extends State<SchermataAvvisi> {
   Widget _schedaAvviso(Avviso avviso, Copie s) {
     final importante = avviso.categoria == 'importante';
     final evidenziato = avviso.id != null && avviso.id == widget.evidenzia;
+    final quando = avviso.quando == null ? avviso.data : dataRelativa(avviso.quando!, s);
+    final descrizione = s.t(avviso.descrizioneIt, avviso.descrizioneEn);
     return Scheda(
       key: evidenziato ? _chiaveEvidenziata : null,
-      padding: const EdgeInsets.all(16),
-      colore: evidenziato ? cieloChiaro : importante ? (temaScuro ? Color.alphaBlend(corallo.withValues(alpha: .08), superficie) : const Color(0xFFFFF7F5)) : superficie,
+      padding: EdgeInsets.zero,
+      colore: evidenziato
+          ? cieloChiaro
+          : importante
+              ? (temaScuro ? Color.alphaBlend(corallo.withValues(alpha: .08), superficie) : const Color(0xFFFFF7F5))
+              : superficie,
       coloreBordo: evidenziato ? cieloScuro : importante ? corallo.withValues(alpha: .40) : null,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              IconaTonda(avviso.icona, colore: avviso.colore, dimensione: 40),
-              const SizedBox(width: 12),
-              Expanded(
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Striscia del colore della categoria: si riconosce il tipo a colpo d'occhio.
+            Container(width: importante ? 5 : 4, color: avviso.colore.withValues(alpha: importante ? 1 : .7)),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 14, 16, 16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      _etichettaCategoria(s, avviso.categoria, avviso.statoManutenzione),
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: avviso.colore),
+                    Row(
+                      children: [
+                        IconaTonda(avviso.icona, colore: avviso.colore, dimensione: 34),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text.rich(
+                            TextSpan(children: [
+                              TextSpan(
+                                text: _etichettaCategoria(s, avviso.categoria, avviso.statoManutenzione),
+                                style: TextStyle(fontWeight: FontWeight.w800, color: avviso.colore),
+                              ),
+                              if (quando.isNotEmpty)
+                                TextSpan(text: '  ·  $quando', style: TextStyle(color: testoSecondario)),
+                            ]),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                        ),
+                        if (importante) Etichetta(s.t('DA LEGGERE', 'PLEASE READ'), colore: coralloScuro, sfondo: coralloChiaro),
+                      ],
                     ),
-                    if (avviso.data.isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Text(avviso.data, style: TextStyle(fontSize: 12.5, color: testoSecondario)),
+                    const SizedBox(height: 10),
+                    Text(
+                      s.t(avviso.titoloIt, avviso.titoloEn),
+                      style: TextStyle(fontSize: 16.5, height: 1.3, fontWeight: FontWeight.w800, color: testo),
+                    ),
+                    if (descrizione.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(descrizione, style: TextStyle(fontSize: 14.5, height: 1.5, color: testoSecondario)),
                     ],
                   ],
                 ),
               ),
-              if (importante) Etichetta(s.t('DA LEGGERE', 'PLEASE READ'), colore: coralloScuro, sfondo: coralloChiaro),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            s.t(avviso.titoloIt, avviso.titoloEn),
-            style: TextStyle(fontSize: 16.5, height: 1.3, fontWeight: FontWeight.w800, color: testo),
-          ),
-          if (s.t(avviso.descrizioneIt, avviso.descrizioneEn).isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Text(
-              s.t(avviso.descrizioneIt, avviso.descrizioneEn),
-              style: TextStyle(fontSize: 14.5, height: 1.5, color: testoSecondario),
             ),
           ],
-        ],
+        ),
       ),
     );
   }
@@ -3171,17 +3509,25 @@ class _SchermataAvvisiState extends State<SchermataAvvisi> {
               icona: Icons.notifications_rounded,
               accento: Accento.viola,
             ),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _filtroAvvisi('tutti', s.t('Tutti', 'All'), Icons.apps_rounded, Accento.viola),
-                _filtroAvvisi('importante', s.t('Importanti', 'Important'), Icons.priority_high_rounded, Accento.arancio),
-                _filtroAvvisi('manutenzione', s.t('Manutenzione', 'Maintenance'), Icons.handyman_rounded, Accento.giallo),
-                _filtroAvvisi('novita', s.t('Novità', 'News'), Icons.new_releases_rounded, Accento.blu),
-              ],
+            // Filtri su una sola riga che scorre di lato.
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              clipBehavior: Clip.none,
+              child: Row(
+                children: [
+                  for (final (i, f) in [
+                    ('tutti', s.t('Tutti', 'All'), Icons.apps_rounded, Accento.viola),
+                    ('importante', s.t('Importanti', 'Important'), Icons.priority_high_rounded, Accento.arancio),
+                    ('manutenzione', s.t('Manutenzione', 'Maintenance'), Icons.handyman_rounded, Accento.giallo),
+                    ('novita', s.t('Novità', 'News'), Icons.new_releases_rounded, Accento.blu),
+                  ].indexed) ...[
+                    if (i > 0) const SizedBox(width: 8),
+                    _filtroAvvisi(f.$1, f.$2, f.$3, f.$4),
+                  ],
+                ],
+              ),
             ),
-            const SizedBox(height: 22),
+            const SizedBox(height: 18),
             if (!_caricamento && _errore == null)
               TitoloSezione(
                 s.t('Aggiornamenti', 'Updates'),

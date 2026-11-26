@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
@@ -104,6 +106,10 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
   final FocusNode _focus = FocusNode();
   bool _inAttesa = false;
   String? _disclaimer;
+  /// Avvertenza completa aperta (di base resta su una riga).
+  bool _avvertenzaAperta = false;
+  /// Ultima risposta arrivata: il testo compare man mano, come scritto.
+  _Messaggio? _inScrittura;
 
   static const List<(String, String)> _suggerite = [
     ('Com’è l’aria adesso?', 'How is the air right now?'),
@@ -168,7 +174,9 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
       setState(() {
         _disclaimer ??= risposta.disclaimer.isEmpty ? null : risposta.disclaimer;
         final indice = _messaggi.indexOf(domanda);
-        _messaggi.insert(indice + 1, _Messaggio(ChatTurn.assistente, risposta.answer, fonti: fonti));
+        final nuova = _Messaggio(ChatTurn.assistente, risposta.answer, fonti: fonti);
+        _messaggi.insert(indice + 1, nuova);
+        if (!MediaQuery.of(context).disableAnimations) _inScrittura = nuova;
       });
       SemanticsService.sendAnnouncement(View.of(context), risposta.answer, Directionality.of(context));
     } catch (e) {
@@ -338,6 +346,8 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
     );
   }
 
+  /// Avvertenza su una riga (niente dati personali); un tocco mostra anche
+  /// la nota sulle risposte automatiche e sui sensori.
   Widget _avvertenze() {
     final s = widget.s;
     final disclaimer =
@@ -348,40 +358,69 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
         );
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 6),
       decoration: BoxDecoration(
         color: cieloChiaro,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: cielo.withValues(alpha: .25)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(Icons.info_outline_rounded, size: 18, color: cieloScuro),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(disclaimer, style: TextStyle(fontSize: 12.5, height: 1.35, color: testo)),
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: () => setState(() => _avvertenzaAperta = !_avvertenzaAperta),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+            child: AnimatedSize(
+              duration: durata(context, 260),
+              curve: Curves.easeOutCubic,
+              alignment: Alignment.topCenter,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.privacy_tip_outlined, size: 17, color: cieloScuro),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          s.t('Non scrivere dati personali nelle domande.', 'Do not write personal data in your questions.'),
+                          style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: cieloScuro),
+                        ),
+                      ),
+                      AnimatedRotation(
+                        turns: _avvertenzaAperta ? .5 : 0,
+                        duration: durata(context, 260),
+                        child: Icon(
+                          Icons.expand_more_rounded,
+                          size: 20,
+                          color: cieloScuro,
+                          semanticLabel: _avvertenzaAperta
+                              ? s.t('Nascondi dettagli', 'Hide details')
+                              : s.t('Mostra dettagli', 'Show details'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (_avvertenzaAperta)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6, right: 6),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.info_outline_rounded, size: 17, color: cieloScuro),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(disclaimer, style: TextStyle(fontSize: 12.5, height: 1.35, color: testo)),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
               ),
-            ],
+            ),
           ),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              Icon(Icons.privacy_tip_outlined, size: 18, color: cieloScuro),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  s.t('Non scrivere dati personali nelle domande.', 'Do not write personal data in your questions.'),
-                  style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: cieloScuro),
-                ),
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -392,7 +431,7 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
       children: [
         Center(
-          child: IconaTonda(Icons.park_rounded, colore: foresta, sfondo: menta, dimensione: 64),
+          child: Appare(child: IconaTonda(Icons.park_rounded, colore: foresta, sfondo: menta, dimensione: 64)),
         ),
         const SizedBox(height: 14),
         Text(
@@ -415,11 +454,14 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
           spacing: 8,
           runSpacing: 8,
           children: [
-            for (final (it, en) in _suggerite)
-              ActionChip(
-                avatar: Icon(Icons.chat_bubble_outline_rounded, size: 17, color: cieloScuro),
-                label: Text(s.t(it, en)),
-                onPressed: _inAttesa ? null : () => _invia(s.t(it, en)),
+            for (final (i, (it, en)) in _suggerite.indexed)
+              Appare(
+                indice: i + 1,
+                child: ActionChip(
+                  avatar: Icon(Icons.chat_bubble_outline_rounded, size: 17, color: cieloScuro),
+                  label: Text(s.t(it, en)),
+                  onPressed: _inAttesa ? null : () => _invia(s.t(it, en)),
+                ),
               ),
           ],
         ),
@@ -435,7 +477,11 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
       itemBuilder: (context, i) {
         if (i == _messaggi.length) return _staScrivendo();
         final m = _messaggi[i];
-        return m.utente ? _bollaUtente(m) : _bollaAssistente(m);
+        return _Entrata(
+          key: ObjectKey(m),
+          daDestra: m.utente,
+          child: m.utente ? _bollaUtente(m) : _bollaAssistente(m),
+        );
       },
     );
   }
@@ -531,9 +577,9 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
                           bottomRight: Radius.circular(18),
                         ),
                       ),
-                      child: TestoRisposta(m.testo),
+                      child: identical(m, _inScrittura) ? _testoInScrittura(m) : TestoRisposta(m.testo),
                     ),
-                    if (m.fonti.isNotEmpty) ...[
+                    if (m.fonti.isNotEmpty && !identical(m, _inScrittura)) ...[
                       const SizedBox(height: 6),
                       Wrap(
                         spacing: 6,
@@ -561,6 +607,20 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
     );
   }
 
+  Widget _testoInScrittura(_Messaggio m) {
+    final ms = (m.testo.length * 12).clamp(400, 1800);
+    return TweenAnimationBuilder<int>(
+      tween: IntTween(begin: 0, end: m.testo.length),
+      duration: Duration(milliseconds: ms),
+      onEnd: () {
+        if (!mounted || !identical(_inScrittura, m)) return;
+        setState(() => _inScrittura = null);
+        _scorriInFondo();
+      },
+      builder: (context, n, _) => TestoRisposta(m.testo.substring(0, n)),
+    );
+  }
+
   Widget _staScrivendo() {
     final s = widget.s;
     return Semantics(
@@ -574,23 +634,18 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
             IconaTonda(Icons.park_rounded, colore: foresta, sfondo: menta, dimensione: 32),
             const SizedBox(width: 8),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               decoration: BoxDecoration(
                 color: superficie,
                 border: Border.all(color: bordo),
-                borderRadius: BorderRadius.circular(18),
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(4),
+                  topRight: Radius.circular(18),
+                  bottomLeft: Radius.circular(18),
+                  bottomRight: Radius.circular(18),
+                ),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
-                  const SizedBox(width: 10),
-                  Text(
-                    s.t('sta scrivendo…', 'typing…'),
-                    style: TextStyle(fontSize: 14, fontStyle: FontStyle.italic, color: testoSecondario),
-                  ),
-                ],
-              ),
+              child: const PuntiniAttesa(),
             ),
           ],
         ),
@@ -602,8 +657,12 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
     final s = widget.s;
     final testo = _campo.text.trim();
     final puoInviare = !_inAttesa && testo.isNotEmpty && testo.length <= LimitiAssistente.lunghezzaDomanda;
+    final pillola = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(26),
+      borderSide: BorderSide(color: bordoForte, width: 1.2),
+    );
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
       decoration: BoxDecoration(
         color: superficie,
         border: Border(top: BorderSide(color: bordo)),
@@ -622,27 +681,59 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
               textInputAction: TextInputAction.send,
               textCapitalization: TextCapitalization.sentences,
               onSubmitted: puoInviare ? (_) => _invia() : null,
+              // Il contatore compare solo quando ci si avvicina al limite.
+              buildCounter: (context, {required currentLength, required isFocused, required maxLength}) =>
+                  maxLength != null && currentLength > maxLength - 80
+                      ? Text('$currentLength/$maxLength', style: TextStyle(fontSize: 12, color: testoSecondario))
+                      : null,
               decoration: InputDecoration(
                 hintText: s.t('Scrivi a $nomeAssistente…', 'Message $nomeAssistente…'),
                 labelText: s.t('Domanda', 'Question'),
                 floatingLabelBehavior: FloatingLabelBehavior.never,
+                filled: true,
+                fillColor: sfondo,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                border: pillola,
+                enabledBorder: pillola,
+                focusedBorder: pillola.copyWith(borderSide: BorderSide(color: foresta, width: 2)),
               ),
             ),
           ),
           const SizedBox(width: 8),
-          Padding(
-            padding: const EdgeInsets.only(bottom: 22),
-            child: IconButton.filled(
-              tooltip: s.t('Invia', 'Send'),
-              style: IconButton.styleFrom(minimumSize: const Size(52, 52), backgroundColor: foresta),
-              onPressed: puoInviare ? _invia : null,
-              icon: _inAttesa
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                    )
-                  : const Icon(Icons.send_rounded),
+          Semantics(
+            button: true,
+            enabled: puoInviare,
+            label: s.t('Invia', 'Send'),
+            excludeSemantics: true,
+            child: Premibile(
+              onTap: puoInviare ? _invia : null,
+              scala: .88,
+              child: AnimatedContainer(
+                duration: durata(context, 240),
+                curve: Curves.easeOutCubic,
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: puoInviare || _inAttesa ? foresta : bordo,
+                  boxShadow: puoInviare
+                      ? [BoxShadow(color: foresta.withValues(alpha: .35), blurRadius: 12, offset: const Offset(0, 4))]
+                      : null,
+                ),
+                child: Center(
+                  child: _inAttesa
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : AnimatedRotation(
+                          turns: puoInviare ? -.08 : 0,
+                          duration: durata(context, 240),
+                          child: Icon(Icons.send_rounded, color: puoInviare ? Colors.white : testoTenue, size: 22),
+                        ),
+                ),
+              ),
             ),
           ),
         ],
@@ -695,4 +786,87 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
     TipiFonte.categorie => s.t('Segnala', 'Report'),
     _ => null,
   };
+}
+
+/// Bolla che entra dal proprio lato con una piccola crescita.
+class _Entrata extends StatelessWidget {
+  final bool daDestra;
+  final Widget child;
+  const _Entrata({super.key, required this.daDestra, required this.child});
+
+  @override
+  Widget build(BuildContext context) => TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0, end: 1),
+        duration: durata(context, 380),
+        curve: Curves.easeOutCubic,
+        builder: (context, v, figlio) => Opacity(
+          opacity: v,
+          child: Transform.translate(
+            offset: Offset((daDestra ? 24 : -24) * (1 - v), 8 * (1 - v)),
+            child: Transform.scale(
+              scale: .94 + .06 * v,
+              alignment: daDestra ? Alignment.bottomRight : Alignment.bottomLeft,
+              child: figlio,
+            ),
+          ),
+        ),
+        child: child,
+      );
+}
+
+/// Tre puntini che saltellano a turno mentre l'assistente risponde.
+class PuntiniAttesa extends StatefulWidget {
+  const PuntiniAttesa({super.key});
+
+  @override
+  State<PuntiniAttesa> createState() => _PuntiniAttesaState();
+}
+
+class _PuntiniAttesaState extends State<PuntiniAttesa> with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 1100));
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.of(context).disableAnimations) {
+      _c.value = .3;
+    } else if (!_c.isAnimating) {
+      _c.repeat();
+    }
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+        animation: _c,
+        builder: (context, _) => Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var i = 0; i < 3; i++) ...[
+              if (i > 0) const SizedBox(width: 5),
+              Builder(builder: (context) {
+                // Ogni puntino sale e scende con un piccolo ritardo rispetto al precedente.
+                final fase = ((_c.value - i * .15) % 1 + 1) % 1;
+                final su = fase < .4 ? math.sin(fase / .4 * math.pi) : 0.0;
+                return Transform.translate(
+                  offset: Offset(0, -5 * su),
+                  child: Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Color.lerp(testoTenue, foresta, su),
+                    ),
+                  ),
+                );
+              }),
+            ],
+          ],
+        ),
+      );
 }

@@ -221,6 +221,9 @@ void main() {
       await tester.pump();
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
       await tester.pump();
+      // La risposta compare man mano: si aspetta che sia scritta tutta.
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pump(const Duration(milliseconds: 300));
       expect(find.textContaining('Aria buona'), findsOneWidget);
       expect(find.text('Dati ambientali'), findsOneWidget);
     });

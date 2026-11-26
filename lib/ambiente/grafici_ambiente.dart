@@ -25,8 +25,14 @@ class MiniCurva extends StatelessWidget {
       maxY += 1;
     }
     final margine = (maxY - minY) * .12;
+    // La curva si disegna da sinistra a destra quando compare.
     return ExcludeSemantics(
-      child: SizedBox(
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0, end: 1),
+        duration: durata(context, 1000),
+        curve: Curves.easeInOutCubic,
+        builder: (context, v, figlio) => ClipRect(clipper: _Rivela(v), child: figlio),
+        child: SizedBox(
         height: altezza,
         child: LineChart(
           LineChartData(
@@ -59,9 +65,22 @@ class MiniCurva extends StatelessWidget {
           ),
           duration: Duration.zero,
         ),
+        ),
       ),
     );
   }
+}
+
+/// Ritaglio che mostra solo la parte sinistra, fino alla frazione [v].
+class _Rivela extends CustomClipper<Rect> {
+  final double v;
+  const _Rivela(this.v);
+
+  @override
+  Rect getClip(Size size) => Rect.fromLTWH(0, -4, size.width * v, size.height + 8);
+
+  @override
+  bool shouldReclip(_Rivela old) => old.v != v;
 }
 
 /// Grafico di una serie: linea delle medie e banda minimo–massimo.

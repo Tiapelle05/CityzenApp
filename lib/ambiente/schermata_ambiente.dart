@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -224,14 +225,13 @@ class _SchermataAmbienteState extends State<SchermataAmbiente> {
           Row(
             children: [
               ExcludeSemantics(
-                child: IconaTonda(
-                  st.fresh ? Icons.air_rounded : Icons.cloud_off_rounded,
-                  colore: accento.forte,
-                  sfondo: superficie,
-                  dimensione: 48,
+                child: IndicatoreAria(
+                  livello: st.fresh ? a.airQuality.level : EnvLevel.unknown,
+                  accento: accento,
+                  icona: st.fresh ? Icons.air_rounded : Icons.cloud_off_rounded,
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -253,23 +253,12 @@ class _SchermataAmbienteState extends State<SchermataAmbiente> {
             ],
           ),
           const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            children: [
-              Etichetta(
-                statoStazione,
-                colore: st.fresh ? foresta : testoSecondario,
-                sfondo: superficie,
-                icona: st.online ? Icons.sensors_rounded : Icons.sensors_off_rounded,
-              ),
-              Etichetta(
-                s.t('Ultima lettura ${quandoLettura(st.lastSeen, s)}', 'Last reading ${quandoLettura(st.lastSeen, s)}'),
-                colore: testoSecondario,
-                sfondo: superficie,
-                icona: Icons.schedule_rounded,
-              ),
-            ],
+          // Stato della stazione e ora della lettura su una sola riga.
+          Etichetta(
+            '$statoStazione · ${s.t('lettura ${quandoLettura(st.lastSeen, s)}', 'reading ${quandoLettura(st.lastSeen, s)}')}',
+            colore: st.fresh ? foresta : testoSecondario,
+            sfondo: superficie,
+            icona: st.online ? Icons.sensors_rounded : Icons.sensors_off_rounded,
           ),
         ],
       ),
@@ -353,13 +342,20 @@ class _SchermataAmbienteState extends State<SchermataAmbiente> {
                         crossAxisAlignment: CrossAxisAlignment.baseline,
                         textBaseline: TextBaseline.alphabetic,
                         children: [
-                          Text(
-                            formattaValore(r.value, m, s, conUnita: false),
-                            style: TextStyle(
-                              fontSize: 30,
-                              fontWeight: FontWeight.w900,
-                              color: st.fresh ? testo : testoSecondario,
-                              letterSpacing: -.5,
+                          // Il numero sale fino al valore letto.
+                          TweenAnimationBuilder<double>(
+                            tween: Tween(begin: 0, end: r.value ?? 0),
+                            duration: durata(context, 900),
+                            curve: Curves.easeOutCubic,
+                            builder: (context, v, _) => Text(
+                              formattaValore(r.value == null ? null : v, m, s, conUnita: false),
+                              style: TextStyle(
+                                fontSize: 30,
+                                fontWeight: FontWeight.w900,
+                                color: st.fresh ? testo : testoSecondario,
+                                letterSpacing: -.5,
+                                fontFeatures: const [FontFeature.tabularFigures()],
+                              ),
                             ),
                           ),
                           if (!nonDisponibile) ...[
@@ -615,4 +611,64 @@ class _SchermataGraficoState extends State<SchermataGrafico> {
       ),
     );
   }
+}
+
+/// Anello che si riempie in base alla qualità dell'aria (un quarto per livello:
+/// buona, discreta, scarsa, pessima) con l'icona al centro.
+class IndicatoreAria extends StatelessWidget {
+  final EnvLevel livello;
+  final Accento accento;
+  final IconData icona;
+  const IndicatoreAria({super.key, required this.livello, required this.accento, required this.icona});
+
+  @override
+  Widget build(BuildContext context) {
+    final quota = switch (livello) {
+      EnvLevel.good => .25,
+      EnvLevel.moderate => .5,
+      EnvLevel.poor => .75,
+      EnvLevel.bad => 1.0,
+      EnvLevel.unknown => 0.0,
+    };
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: quota),
+      duration: durata(context, 1100),
+      curve: Curves.easeOutCubic,
+      builder: (context, v, _) => SizedBox(
+        width: 58,
+        height: 58,
+        child: CustomPaint(
+          painter: _PittoreAnello(v, accento.base, superficie),
+          child: Center(child: Icon(icona, color: accento.forte, size: 26)),
+        ),
+      ),
+    );
+  }
+}
+
+class _PittoreAnello extends CustomPainter {
+  final double quota;
+  final Color colore;
+  final Color fondo;
+  _PittoreAnello(this.quota, this.colore, this.fondo);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = size.center(Offset.zero);
+    final r = size.width / 2;
+    canvas.drawCircle(c, r, Paint()..color = fondo);
+    final rett = Rect.fromCircle(center: c, radius: r - 4);
+    final pennello = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 5
+      ..strokeCap = StrokeCap.round;
+    // Arco di 270°, aperto in basso come un indicatore.
+    const inizio = math.pi * .75;
+    const ampiezza = math.pi * 1.5;
+    canvas.drawArc(rett, inizio, ampiezza, false, pennello..color = colore.withValues(alpha: .18));
+    if (quota > 0) canvas.drawArc(rett, inizio, ampiezza * quota, false, pennello..color = colore);
+  }
+
+  @override
+  bool shouldRepaint(_PittoreAnello old) => old.quota != quota || old.colore != colore || old.fondo != fondo;
 }
