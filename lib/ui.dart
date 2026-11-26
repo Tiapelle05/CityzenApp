@@ -1,6 +1,7 @@
+import 'dart:math' as math;
 import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show SystemUiOverlayStyle;
+import 'package:flutter/services.dart' show HapticFeedback, SystemUiOverlayStyle;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Palette
@@ -106,6 +107,20 @@ class Copie {
 // Tema
 // ─────────────────────────────────────────────────────────────────────────────
 
+TextTheme _testi() {
+  final base = (_scuro ? ThemeData.dark() : ThemeData.light()).textTheme.apply(bodyColor: testo, displayColor: testo);
+  TextStyle? stretto(TextStyle? t, double spaziatura) => t?.copyWith(letterSpacing: spaziatura, height: 1.2);
+  return base.copyWith(
+    headlineLarge: stretto(base.headlineLarge, -.6),
+    headlineMedium: stretto(base.headlineMedium, -.5),
+    headlineSmall: stretto(base.headlineSmall, -.4),
+    titleLarge: stretto(base.titleLarge, -.3),
+    titleMedium: base.titleMedium?.copyWith(letterSpacing: -.1),
+    bodyLarge: base.bodyLarge?.copyWith(height: 1.45),
+    bodyMedium: base.bodyMedium?.copyWith(height: 1.45),
+  );
+}
+
 ThemeData temaTryees() {
   final forma = RoundedRectangleBorder(borderRadius: BorderRadius.circular(16));
   OutlineInputBorder campo(Color c, double w) => OutlineInputBorder(
@@ -133,12 +148,15 @@ ThemeData temaTryees() {
       outlineVariant: bordo,
       error: coralloScuro,
     ),
-    textTheme: (_scuro ? ThemeData.dark() : ThemeData.light()).textTheme.apply(bodyColor: testo, displayColor: testo),
+    textTheme: _testi(),
     iconTheme: IconThemeData(color: testo),
     scaffoldBackgroundColor: sfondo,
     pageTransitionsTheme: const PageTransitionsTheme(builders: {
       TargetPlatform.android: FadeForwardsPageTransitionsBuilder(),
       TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+      TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+      TargetPlatform.windows: FadeForwardsPageTransitionsBuilder(),
+      TargetPlatform.linux: FadeForwardsPageTransitionsBuilder(),
     }),
     appBarTheme: AppBarTheme(
       backgroundColor: sfondo,
@@ -460,12 +478,12 @@ class Scheda extends StatelessWidget {
     final alta = MediaQuery.highContrastOf(context);
     final raggio = BorderRadius.circular(22);
     final contenuto = Padding(padding: padding, child: child);
-    return Container(
+    final scheda = Container(
       width: double.infinity,
       decoration: BoxDecoration(
         borderRadius: raggio,
-        boxShadow: const [
-          BoxShadow(color: Color(0x0D12261B), blurRadius: 18, offset: Offset(0, 6)),
+        boxShadow: [
+          BoxShadow(color: ombra, blurRadius: 18, offset: const Offset(0, 6)),
         ],
       ),
       child: Material(
@@ -481,7 +499,48 @@ class Scheda extends StatelessWidget {
         child: onTap == null ? contenuto : InkWell(onTap: onTap, child: contenuto),
       ),
     );
+    return onTap == null ? scheda : ScalaAlTocco(child: scheda);
   }
+}
+
+/// Rimpicciolisce appena il figlio mentre il dito è appoggiato, senza
+/// rubare il tocco a InkWell o ai pulsanti che contiene.
+class ScalaAlTocco extends StatefulWidget {
+  final Widget child;
+  final double scala;
+  const ScalaAlTocco({super.key, required this.child, this.scala = .975});
+
+  @override
+  State<ScalaAlTocco> createState() => _ScalaAlToccoState();
+}
+
+class _ScalaAlToccoState extends State<ScalaAlTocco> {
+  bool _premuto = false;
+  Offset? _inizio;
+
+  void _premi(bool v) {
+    if (v != _premuto) setState(() => _premuto = v);
+  }
+
+  @override
+  Widget build(BuildContext context) => Listener(
+        onPointerDown: (e) {
+          _inizio = e.position;
+          _premi(true);
+        },
+        // Se il dito scorre (es. scroll della pagina) la scheda torna normale.
+        onPointerMove: (e) {
+          if (_inizio != null && (e.position - _inizio!).distance > 12) _premi(false);
+        },
+        onPointerUp: (_) => _premi(false),
+        onPointerCancel: (_) => _premi(false),
+        child: AnimatedScale(
+          scale: _premuto ? widget.scala : 1,
+          duration: durata(context, _premuto ? 100 : 280),
+          curve: _premuto ? Curves.easeOut : Curves.easeOutBack,
+          child: widget.child,
+        ),
+      );
 }
 
 /// Piccola etichetta a pillola, con puntino o icona opzionali.
@@ -562,6 +621,28 @@ class Riquadro extends StatelessWidget {
       );
 }
 
+/// «Tira per aggiornare» con i colori dell'app e una vibrazione leggera
+/// quando parte l'aggiornamento.
+class AggiornaTirando extends StatelessWidget {
+  final Future<void> Function() onRefresh;
+  final Widget child;
+  const AggiornaTirando({super.key, required this.onRefresh, required this.child});
+
+  @override
+  Widget build(BuildContext context) => RefreshIndicator(
+        color: foresta,
+        backgroundColor: superficie,
+        strokeWidth: 2.8,
+        displacement: 36,
+        elevation: temaScuro ? 0 : 2,
+        onRefresh: () {
+          HapticFeedback.lightImpact();
+          return onRefresh();
+        },
+        child: child,
+      );
+}
+
 /// Stato vuoto o di errore, con un'azione opzionale per riprovare.
 class StatoVuoto extends StatelessWidget {
   final IconData icona;
@@ -580,27 +661,229 @@ class StatoVuoto extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => Scheda(
-        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 28),
-        child: Column(
-          children: [
-            ExcludeSemantics(child: IconaTonda(icona, colore: accento.forte, sfondo: accento.tinta, dimensione: 58)),
-            const SizedBox(height: 14),
-            Text(
-              messaggio,
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 14.5, height: 1.45, color: testoSecondario),
-            ),
-            if (onAzione != null && etichettaAzione != null) ...[
+  Widget build(BuildContext context) => Appare(
+        child: Scheda(
+          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 26),
+          child: Column(
+            children: [
+              ExcludeSemantics(child: IllustrazioneVuota(icona: icona, accento: accento)),
               const SizedBox(height: 14),
-              FilledButton.tonalIcon(
-                onPressed: onAzione,
-                style: FilledButton.styleFrom(minimumSize: const Size(0, 46)),
-                icon: const Icon(Icons.refresh_rounded, size: 20),
-                label: Text(etichettaAzione!),
+              Text(
+                messaggio,
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 14.5, height: 1.45, color: testoSecondario),
               ),
+              if (onAzione != null && etichettaAzione != null) ...[
+                const SizedBox(height: 16),
+                FilledButton.tonalIcon(
+                  onPressed: onAzione,
+                  style: FilledButton.styleFrom(minimumSize: const Size(0, 46)),
+                  icon: const Icon(Icons.refresh_rounded, size: 20),
+                  label: Text(etichettaAzione!),
+                ),
+              ],
             ],
-          ],
+          ),
+        ),
+      );
+}
+
+/// Piccola illustrazione per gli stati vuoti: una macchia morbida nel colore
+/// dell'accento, due foglioline e qualche puntino attorno, e l'icona che fluttua.
+class IllustrazioneVuota extends StatefulWidget {
+  final IconData icona;
+  final Accento accento;
+  const IllustrazioneVuota({super.key, required this.icona, required this.accento});
+
+  @override
+  State<IllustrazioneVuota> createState() => _IllustrazioneVuotaState();
+}
+
+class _IllustrazioneVuotaState extends State<IllustrazioneVuota> with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 2600));
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.of(context).disableAnimations) {
+      _c.value = .5;
+    } else if (!_c.isAnimating) {
+      _c.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final a = widget.accento;
+    return SizedBox(
+      width: 132,
+      height: 96,
+      child: AnimatedBuilder(
+        animation: _c,
+        builder: (context, _) {
+          final t = Curves.easeInOut.transform(_c.value);
+          return CustomPaint(
+            painter: _PittoreVuoto(t, a.base, a.tinta),
+            child: Center(
+              child: Transform.translate(
+                offset: Offset(0, 3 - 6 * t),
+                child: Container(
+                  width: 58,
+                  height: 58,
+                  decoration: BoxDecoration(
+                    color: superficie,
+                    shape: BoxShape.circle,
+                    boxShadow: [BoxShadow(color: a.base.withValues(alpha: .22), blurRadius: 16, offset: Offset(0, 8 - 4 * t))],
+                  ),
+                  child: Icon(widget.icona, color: a.forte, size: 28),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _PittoreVuoto extends CustomPainter {
+  final double t;
+  final Color colore;
+  final Color tinta;
+  _PittoreVuoto(this.t, this.colore, this.tinta);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = size.center(Offset.zero);
+    // Macchia morbida e irregolare dietro l'icona.
+    final macchia = Path();
+    const punti = 7;
+    for (var i = 0; i <= punti; i++) {
+      final ang = i / punti * 2 * math.pi;
+      final r = 40 + 4 * math.sin(ang * 3 + t * 1.4);
+      final p = c + Offset(math.cos(ang) * r * 1.18, math.sin(ang) * r * .92);
+      if (i == 0) {
+        macchia.moveTo(p.dx, p.dy);
+      } else {
+        final angPrec = (i - .5) / punti * 2 * math.pi;
+        final rc = 44 + 4 * math.cos(angPrec * 2 - t);
+        final q = c + Offset(math.cos(angPrec) * rc * 1.18, math.sin(angPrec) * rc * .92);
+        macchia.quadraticBezierTo(q.dx, q.dy, p.dx, p.dy);
+      }
+    }
+    canvas.drawPath(macchia, Paint()..color = tinta);
+
+    // Due foglioline ai lati, che oscillano appena.
+    void foglia(Offset centro, double rot, double scala) {
+      canvas.save();
+      canvas.translate(centro.dx, centro.dy);
+      canvas.rotate(rot);
+      canvas.scale(scala);
+      final f = Path()
+        ..moveTo(0, -9)
+        ..quadraticBezierTo(7, 0, 0, 9)
+        ..quadraticBezierTo(-7, 0, 0, -9);
+      canvas.drawPath(f, Paint()..color = colore.withValues(alpha: .55));
+      canvas.drawLine(
+        const Offset(0, -6),
+        const Offset(0, 7),
+        Paint()
+          ..color = tinta
+          ..strokeWidth = 1.2,
+      );
+      canvas.restore();
+    }
+
+    foglia(c + Offset(-52, -22 + 3 * t), -.7 + .15 * t, 1);
+    foglia(c + Offset(54, 18 - 3 * t), 2.3 - .15 * t, .8);
+
+    // Puntini decorativi.
+    final punto = Paint()..color = colore.withValues(alpha: .35);
+    canvas.drawCircle(c + Offset(44, -32 - 2 * t), 3.2, punto);
+    canvas.drawCircle(c + Offset(-40, 32 + 2 * t), 2.4, punto);
+    canvas.drawCircle(c + const Offset(-60, 8), 1.8, punto);
+  }
+
+  @override
+  bool shouldRepaint(_PittoreVuoto old) => old.t != t || old.colore != colore || old.tinta != tinta;
+}
+
+/// Fascia di luce che attraversa in diagonale il figlio: l'effetto «shimmer»
+/// dei segnaposto di caricamento. Con [animazione] ferma a 0 non si vede.
+class Riflesso extends StatelessWidget {
+  final Animation<double> animazione;
+  final Widget child;
+  const Riflesso({super.key, required this.animazione, required this.child});
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+        animation: animazione,
+        child: child,
+        builder: (context, figlio) {
+          final v = animazione.value;
+          if (v == 0) return figlio!;
+          final luce = Colors.white.withValues(alpha: temaScuro ? .07 : .75);
+          final x = -1.8 + 3.6 * Curves.easeInOut.transform(v);
+          return ShaderMask(
+            blendMode: BlendMode.srcATop,
+            shaderCallback: (r) => LinearGradient(
+              begin: Alignment(x - .6, -.5),
+              end: Alignment(x + .6, .5),
+              colors: [luce.withValues(alpha: 0), luce, luce.withValues(alpha: 0)],
+            ).createShader(r),
+            child: figlio,
+          );
+        },
+      );
+}
+
+/// Segnaposto rettangolare con il riflesso, per grafici e immagini in arrivo.
+class BloccoInCaricamento extends StatefulWidget {
+  final double altezza;
+  final String etichetta;
+  const BloccoInCaricamento({super.key, required this.altezza, required this.etichetta});
+
+  @override
+  State<BloccoInCaricamento> createState() => _BloccoInCaricamentoState();
+}
+
+class _BloccoInCaricamentoState extends State<BloccoInCaricamento> with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 1500));
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.of(context).disableAnimations) {
+      _c.value = 0;
+    } else if (!_c.isAnimating) {
+      _c.repeat();
+    }
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+        label: widget.etichetta,
+        child: ExcludeSemantics(
+          child: Riflesso(
+            animazione: _c,
+            child: Container(
+              height: widget.altezza,
+              width: double.infinity,
+              decoration: BoxDecoration(color: bordo.withValues(alpha: .7), borderRadius: BorderRadius.circular(16)),
+            ),
+          ),
         ),
       );
 }
@@ -618,16 +901,16 @@ class CaricamentoScheletro extends StatefulWidget {
 class _CaricamentoScheletroState extends State<CaricamentoScheletro> with SingleTickerProviderStateMixin {
   late final AnimationController _pulsazione = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 900),
+    duration: const Duration(milliseconds: 1500),
   );
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (MediaQuery.of(context).disableAnimations) {
-      _pulsazione.value = 1;
+      _pulsazione.value = 0;
     } else if (!_pulsazione.isAnimating) {
-      _pulsazione.repeat(reverse: true);
+      _pulsazione.repeat();
     }
   }
 
@@ -650,8 +933,8 @@ class _CaricamentoScheletroState extends State<CaricamentoScheletro> with Single
   Widget build(BuildContext context) => Semantics(
         label: widget.etichetta,
         child: ExcludeSemantics(
-          child: FadeTransition(
-            opacity: Tween<double>(begin: .45, end: 1).animate(_pulsazione),
+          child: Riflesso(
+            animazione: _pulsazione,
             child: Column(
               children: List.generate(
                 widget.numero,

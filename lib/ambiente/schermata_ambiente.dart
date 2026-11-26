@@ -72,7 +72,7 @@ class _SchermataAmbienteState extends State<SchermataAmbiente> {
     final s = widget.s;
     final contenuto = ListenableBuilder(
       listenable: widget.stato,
-      builder: (context, _) => RefreshIndicator(onRefresh: widget.stato.ricarica, child: _contenuto(context)),
+      builder: (context, _) => AggiornaTirando(onRefresh: widget.stato.ricarica, child: _contenuto(context)),
     );
     if (widget.incorporata) {
       return Column(
@@ -482,7 +482,7 @@ class _SchermataGraficoState extends State<SchermataGrafico> {
           appBar: AppBar(
             title: Text(etichetta, style: const TextStyle(fontWeight: FontWeight.w800)),
           ),
-          body: RefreshIndicator(
+          body: AggiornaTirando(
             onRefresh: _carica,
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
@@ -539,15 +539,7 @@ class _SchermataGraficoState extends State<SchermataGrafico> {
   Widget _grafico(EnvMetric? m, Color colore) {
     final s = widget.s;
     if (_caricamento) {
-      return SizedBox(
-        height: 260,
-        child: Center(
-          child: Semantics(
-            label: s.t('Caricamento del grafico', 'Loading chart'),
-            child: const CircularProgressIndicator(),
-          ),
-        ),
-      );
+      return BloccoInCaricamento(altezza: 260, etichetta: s.t('Caricamento del grafico', 'Loading chart'));
     }
     if (_errore != null) {
       return SizedBox(

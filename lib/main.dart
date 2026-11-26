@@ -1096,7 +1096,7 @@ class _SchermataInizioState extends State<SchermataInizio> {
 
     // La Home riempie lo schermo: la mappa prende tutto lo spazio che resta.
     // Su schermi bassi la pagina ha un'altezza minima e scorre.
-    return RefreshIndicator(
+    return AggiornaTirando(
       onRefresh: _aggiorna,
       child: LayoutBuilder(
         builder: (context, vincoli) {
@@ -2147,12 +2147,7 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
                                 fit: BoxFit.cover,
                                 semanticLabel: s.t('Foto allegata', 'Attached photo'),
                               )
-                            : Container(
-                                height: 200,
-                                color: sfondo,
-                                alignment: Alignment.center,
-                                child: const CircularProgressIndicator(),
-                              ),
+                            : BloccoInCaricamento(altezza: 200, etichetta: s.t('Caricamento della foto', 'Loading photo')),
                       ),
                     ),
                     const SizedBox(height: 10),
@@ -3095,7 +3090,7 @@ class _SchermataIdeeState extends State<SchermataIdee> {
   @override
   Widget build(BuildContext context) {
     final s = widget.s;
-    return RefreshIndicator(
+    return AggiornaTirando(
       onRefresh: () => _caricaIdee(silenzioso: true),
       child: ContenitorePagina(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         TitoloPagina(
@@ -3498,7 +3493,7 @@ class _SchermataAvvisiState extends State<SchermataAvvisi> {
       );
     }
 
-    return RefreshIndicator(
+    return AggiornaTirando(
       onRefresh: () => _caricaAvvisi(silenzioso: true),
       child: ContenitorePagina(
         child: Column(
