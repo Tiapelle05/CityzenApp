@@ -80,12 +80,12 @@ class _SchermataAmbienteState extends State<SchermataAmbiente> {
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 760),
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 8, 0),
+                padding: const EdgeInsets.symmetric(horizontal: margineLaterale),
                 child: TitoloPagina(
                   titolo: s.t('Qualità dell’aria', 'Air quality'),
                   descrizione: s.t('Sensori del parco in tempo reale', 'Live park sensors'),
                   icona: Icons.air_rounded,
-                  accento: Accento.verde,
+                  accento: Accento.acqua,
                   azione: _menuScenario(s),
                 ),
               ),

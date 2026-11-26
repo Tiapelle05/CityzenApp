@@ -189,6 +189,10 @@ ThemeData temaTryees() {
 // Componenti condivisi
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// Margine laterale di tutte le schede: titoli, schede ed elenchi partono
+/// dalla stessa linea, così passando da una scheda all'altra nulla salta.
+const double margineLaterale = 16;
+
 class ContenitorePagina extends StatelessWidget {
   final Widget child;
   const ContenitorePagina({super.key, required this.child});
@@ -206,12 +210,7 @@ class ContenitorePagina extends StatelessWidget {
             ),
             child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-              padding: EdgeInsets.fromLTRB(
-                constraints.maxWidth < 380 ? 16 : 20,
-                4,
-                constraints.maxWidth < 380 ? 16 : 20,
-                32,
-              ),
+              padding: const EdgeInsets.fromLTRB(margineLaterale, 0, margineLaterale, 32),
               child: child,
             ),
           ),
@@ -391,14 +390,20 @@ class TitoloPagina extends StatelessWidget {
     this.azione,
   });
 
+  /// Altezza fissa dell'intestazione: uguale in ogni scheda, con o senza
+  /// descrizione e pulsante, così il contenuto parte sempre alla stessa quota.
+  static const double altezza = 64;
+
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(top: 4, bottom: 16),
-        child: Row(
+        padding: const EdgeInsets.only(top: 6, bottom: 12),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: altezza - 18),
+          child: Row(
           children: [
             if (icona != null) ...[
               ExcludeSemantics(
-                child: IconaTonda(icona!, colore: accento.forte, sfondo: accento.tinta, dimensione: 38),
+                child: IconaTonda(icona!, colore: accento.forte, sfondo: accento.tinta, dimensione: 42),
               ),
               const SizedBox(width: 12),
             ],
@@ -411,9 +416,11 @@ class TitoloPagina extends StatelessWidget {
                   children: [
                     Text(
                       titolo,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: testo,
-                        fontSize: 23,
+                        fontSize: 22,
                         height: 1.15,
                         fontWeight: FontWeight.w800,
                         letterSpacing: -.4,
@@ -434,6 +441,7 @@ class TitoloPagina extends StatelessWidget {
             ),
             if (azione != null) ...[const SizedBox(width: 8), azione!],
           ],
+          ),
         ),
       );
 }

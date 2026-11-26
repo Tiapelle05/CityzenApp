@@ -226,43 +226,16 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
   Widget _intestazione() {
     final s = widget.s;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 8, 8),
-      child: Row(
-        children: [
-          const ExcludeSemantics(
-            child: IconaTonda(Icons.park_rounded, colore: foresta, sfondo: menta, dimensione: 40),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Semantics(
-              header: true,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    nomeAssistente,
-                    style: TextStyle(
-                      fontSize: 21,
-                      height: 1.15,
-                      fontWeight: FontWeight.w800,
-                      color: testo,
-                      letterSpacing: -.3,
-                    ),
-                  ),
-                  Text(
-                    s.t('L’assistente del parco', 'Your park assistant'),
-                    style: const TextStyle(fontSize: 13, color: testoSecondario),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          AnimatedSwitcher(
-            duration: durata(context, 200),
-            child: _messaggi.isEmpty ? const SizedBox(key: ValueKey('vuoto')) : _pulsanteNuova(s),
-          ),
-        ],
+      padding: const EdgeInsets.symmetric(horizontal: margineLaterale),
+      child: TitoloPagina(
+        titolo: nomeAssistente,
+        descrizione: s.t('L’assistente del parco', 'Your park assistant'),
+        icona: Icons.park_rounded,
+        accento: Accento.viola,
+        azione: AnimatedSwitcher(
+          duration: durata(context, 200),
+          child: _messaggi.isEmpty ? const SizedBox(key: ValueKey('vuoto')) : _pulsanteNuova(s),
+        ),
       ),
     );
   }
@@ -291,7 +264,7 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
       children: [
         const Center(
-          child: IconaTonda(Icons.park_rounded, colore: foresta, sfondo: menta, dimensione: 64),
+          child: IconaTonda(Icons.park_rounded, colore: lavanda, sfondo: lavandaChiaro, dimensione: 64),
         ),
         const SizedBox(height: 14),
         Text(
@@ -364,7 +337,7 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: const BoxDecoration(
-                  color: foresta,
+                  color: lavanda,
                   borderRadius: BorderRadius.only(
                     topLeft: Radius.circular(18),
                     topRight: Radius.circular(18),
@@ -422,7 +395,7 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const ExcludeSemantics(
-                child: IconaTonda(Icons.park_rounded, colore: foresta, sfondo: menta, dimensione: 32),
+                child: IconaTonda(Icons.park_rounded, colore: lavanda, sfondo: lavandaChiaro, dimensione: 32),
               ),
               const SizedBox(width: 8),
               Flexible(
@@ -453,7 +426,7 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
                             if (_etichettaFonte(f, s) case final etichetta?)
                               ActionChip(
                                 visualDensity: VisualDensity.compact,
-                                avatar: Icon(_iconaFonte(f.type), size: 16, color: foresta),
+                                avatar: Icon(_iconaFonte(f.type), size: 16, color: lavanda),
                                 label: Text(etichetta, style: const TextStyle(fontSize: 12.5)),
                                 tooltip: s.t('Apri: $etichetta', 'Open: $etichetta'),
                                 onPressed: widget.onFonte == null ? null : () => widget.onFonte!(context, f),
@@ -481,7 +454,7 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
         padding: const EdgeInsets.only(bottom: 12),
         child: Row(
           children: [
-            const IconaTonda(Icons.park_rounded, colore: foresta, sfondo: menta, dimensione: 32),
+            const IconaTonda(Icons.park_rounded, colore: lavanda, sfondo: lavandaChiaro, dimensione: 32),
             const SizedBox(width: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -560,7 +533,7 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
                       curve: Curves.easeOutBack,
                       child: IconButton.filled(
                         tooltip: s.t('Invia', 'Send'),
-                        style: IconButton.styleFrom(minimumSize: const Size(52, 52), backgroundColor: foresta),
+                        style: IconButton.styleFrom(minimumSize: const Size(52, 52), backgroundColor: lavanda),
                         onPressed: attivo ? _invia : null,
                         icon: AnimatedSwitcher(
                           duration: durata(context, 180),
@@ -657,7 +630,7 @@ class _PuntiniScritturaState extends State<_PuntiniScrittura> with SingleTickerP
         width: 7,
         height: 7,
         margin: const EdgeInsets.symmetric(horizontal: 2),
-        decoration: const BoxDecoration(color: foresta, shape: BoxShape.circle),
+        decoration: const BoxDecoration(color: lavanda, shape: BoxShape.circle),
       ),
     );
   }

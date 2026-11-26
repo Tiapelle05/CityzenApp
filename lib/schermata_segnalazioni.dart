@@ -677,7 +677,7 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
       height: _altezzaFiltri,
       child: ListView(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+        padding: const EdgeInsets.fromLTRB(margineLaterale, 8, margineLaterale, 4),
         clipBehavior: Clip.none,
         children: [
           Center(child: _interruttoreChi(s)),

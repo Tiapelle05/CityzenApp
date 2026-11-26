@@ -557,7 +557,7 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
       ),
       icon: Badge(
         isLabelVisible: _avvisiAttivi > 0,
-        backgroundColor: _avvisiUrgenti ? coralloScuro : lavanda,
+        backgroundColor: _avvisiUrgenti ? coralloScuro : cielo,
         label: Text('$_avvisiAttivi'),
         child: Icon(
           _avvisiAttivi > 0 ? Icons.notifications_rounded : Icons.notifications_none_rounded,
@@ -2686,13 +2686,13 @@ class _SchermataAvvisiState extends State<SchermataAvvisi> {
             TitoloPagina(
               titolo: s.t('Avvisi del parco', 'Park notices'),
               icona: Icons.notifications_rounded,
-              accento: Accento.viola,
+              accento: Accento.blu,
             ),
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children: [
-                _filtroAvvisi('tutti', s.t('Tutti', 'All'), Icons.apps_rounded, Accento.viola),
+                _filtroAvvisi('tutti', s.t('Tutti', 'All'), Icons.apps_rounded, Accento.blu),
                 _filtroAvvisi('importante', s.t('Importanti', 'Important'), Icons.priority_high_rounded, Accento.arancio),
                 _filtroAvvisi('manutenzione', s.t('Manutenzione', 'Maintenance'), Icons.handyman_rounded, Accento.giallo),
                 _filtroAvvisi('novita', s.t('Novità', 'News'), Icons.new_releases_rounded, Accento.blu),
