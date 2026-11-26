@@ -7,11 +7,60 @@ import 'citizen_api.dart';
 import 'mappa_parco.dart';
 import 'ui.dart';
 
+/// Ordina gli elementi seguendo la loro posizione, così due vicini nel
+/// carosello sono vicini anche sulla mappa: si parte da un'estremità del lato
+/// più lungo (ovest o nord) e si va ogni volta al più vicino non ancora preso.
+/// Quelli senza posizione restano in fondo, nell'ordine di prima.
+List<T> ordinaPerVicinanza<T>(List<T> elementi, LatLng? Function(T) posizione) {
+  final punti = <(T, double, double)>[];
+  final senza = <T>[];
+  for (final e in elementi) {
+    final p = posizione(e);
+    if (p == null) {
+      senza.add(e);
+    } else {
+      // Gradi di longitudine accorciati verso i poli: distanze quasi in metri.
+      punti.add((e, p.longitude * math.cos(p.latitude * math.pi / 180), p.latitude));
+    }
+  }
+  if (punti.length < 3) {
+    punti.sort((a, b) => a.$2.compareTo(b.$2));
+    return [for (final p in punti) p.$1, ...senza];
+  }
+  final xs = punti.map((p) => p.$2);
+  final ys = punti.map((p) => p.$3);
+  final largo = xs.reduce(math.max) - xs.reduce(math.min) >= ys.reduce(math.max) - ys.reduce(math.min);
+  var corrente = 0;
+  for (var i = 1; i < punti.length; i++) {
+    final migliore = largo ? punti[i].$2 < punti[corrente].$2 : punti[i].$3 > punti[corrente].$3;
+    if (migliore) corrente = i;
+  }
+  final restanti = [...punti];
+  final ordinati = <T>[];
+  var ultimo = restanti.removeAt(corrente);
+  ordinati.add(ultimo.$1);
+  while (restanti.isNotEmpty) {
+    var vicino = 0;
+    var distanza = double.infinity;
+    for (var i = 0; i < restanti.length; i++) {
+      final dx = restanti[i].$2 - ultimo.$2;
+      final dy = restanti[i].$3 - ultimo.$3;
+      final d = dx * dx + dy * dy;
+      if (d < distanza) {
+        distanza = d;
+        vicino = i;
+      }
+    }
+    ultimo = restanti.removeAt(vicino);
+    ordinati.add(ultimo.$1);
+  }
+  return [...ordinati, ...senza];
+}
+
 /// Mappa delle segnalazioni del parco.
 ///
-/// La mappa occupa tutta la pagina; sopra ci sono i filtri, sotto un pannello
-/// che si trascina verso l'alto con l'elenco e il dettaglio della segnalazione
-/// scelta. Così si scorre l'elenco senza mai trascinare la mappa per sbaglio.
+/// La mappa occupa tutta la pagina; sopra ci sono i filtri, sotto un carosello
+/// di schede nell'ordine dei segnaposto e un pulsante che apre l'elenco completo.
 /// Si aggiorna in tempo reale dal WebSocket /citizen/ws.
 class SchermataSegnalazioni extends StatefulWidget {
   final Copie s;
@@ -56,10 +105,28 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
   /// Carosello delle segnalazioni in basso: scorrendo le schede la mappa segue.
   final PageController _carosello = PageController(viewportFraction: .9);
 
+  /// Vero mentre il carosello si muove da solo (tocco sulla mappa o sull'elenco):
+  /// le schede che attraversa non diventano la scelta e la mappa resta ferma.
+  bool _caroselloGuidato = false;
+  int _mossaCarosello = 0;
+
+  /// Dissolvenza dei salti lunghi: la scheda lontana compare senza far
+  /// scorrere tutte quelle in mezzo.
+  late final AnimationController _dissolvenza = AnimationController(vsync: this, value: 1);
+
+  /// Ordine del carosello per [_items] e [_filtroStato] (si ricalcola solo se cambiano).
+  List<Map<String, dynamic>>? _ordine;
+  List<Map<String, dynamic>>? _ordineDi;
+  String? _ordineFiltro;
+
   /// Spazio occupato in alto dalla barra dei filtri.
   static const double _altezzaFiltri = 58;
-  /// Spazio occupato in basso da carosello e pulsante dell'elenco.
-  static const double _ingombroBasso = 170;
+  /// Altezza delle schede: segue la dimensione del testo scelta sul telefono.
+  double get _altezzaSchede => 40 + MediaQuery.textScalerOf(context).scale(66);
+
+  /// Spazio occupato in basso da carosello e pulsante dell'elenco
+  /// (margine 12, schede, spazio 10, pulsante 38, e un po' d'aria).
+  double get _ingombroBasso => 12 + _altezzaSchede + 10 + 38 + 4;
 
   @override
   void initState() {
@@ -81,6 +148,7 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
     _debounce?.cancel();
     _volo.dispose();
     _carosello.dispose();
+    _dissolvenza.dispose();
     _mappa.dispose();
     super.dispose();
   }
@@ -106,6 +174,7 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
           _errore = null;
           if (!rows.any((r) => r['id'] == _selezionata)) _selezionata = null;
         });
+        _allineaCarosello();
       }
     } catch (e) {
       final notFound = e is ApiException && e.statusCode == 404;
@@ -159,7 +228,7 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
     } catch (_) {
       return; // mappa non ancora pronta
     }
-    const foglio = _ingombroBasso;
+    final foglio = _ingombroBasso;
     final altezza = cam.nonRotatedSize.height;
     final schermo = cam.latLngToScreenOffset(p);
     final coperto = schermo.dy < _altezzaFiltri + 30 ||
@@ -172,20 +241,64 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
     _volo.vola(centro, z, animato: _animazioni);
   }
 
+  /// Schede del carosello nell'ordine dei segnaposto sulla mappa.
+  List<Map<String, dynamic>> get _ordineCarosello {
+    if (_ordine == null || !identical(_ordineDi, _items) || _ordineFiltro != _filtroStato) {
+      _ordine = ordinaPerVicinanza(_visibili, MappaParco.puntoDi);
+      _ordineDi = _items;
+      _ordineFiltro = _filtroStato;
+    }
+    return _ordine!;
+  }
+
+  /// Porta il carosello alla scheda [indice] senza che le schede attraversate
+  /// diventino la scelta: quella accanto scorre, una lontana compare in dissolvenza.
+  Future<void> _portaCaroselloA(int indice) async {
+    if (!_carosello.hasClients) return;
+    final attuale = _carosello.page?.round() ?? 0;
+    if (attuale == indice) return;
+    final mossa = ++_mossaCarosello;
+    _caroselloGuidato = true;
+    try {
+      final d = durata(context, 320);
+      if (d == Duration.zero) {
+        _carosello.jumpToPage(indice);
+      } else if ((indice - attuale).abs() == 1) {
+        await _carosello.animateToPage(indice, duration: d, curve: Curves.easeOutCubic);
+      } else {
+        await _dissolvenza.animateTo(0, duration: const Duration(milliseconds: 90));
+        if (!mounted || mossa != _mossaCarosello || !_carosello.hasClients) return;
+        _carosello.jumpToPage(indice);
+        await _dissolvenza.animateTo(1, duration: const Duration(milliseconds: 180));
+      }
+    } finally {
+      if (mossa == _mossaCarosello) {
+        _caroselloGuidato = false;
+        if (mounted && _dissolvenza.value < 1) _dissolvenza.value = 1;
+      }
+    }
+  }
+
+  /// Dopo una ricarica o un filtro il carosello torna sulla scheda scelta.
+  void _allineaCarosello() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _selezionata == null) return;
+      final indice = _ordineCarosello.indexWhere((r) => r['id'] == _selezionata);
+      if (indice < 0 || !_carosello.hasClients || _carosello.page?.round() == indice) return;
+      final mossa = ++_mossaCarosello;
+      _caroselloGuidato = true;
+      _carosello.jumpToPage(indice);
+      if (mossa == _mossaCarosello) _caroselloGuidato = false;
+    });
+  }
+
   /// Sceglie una segnalazione: il carosello va alla sua scheda (se la scelta
   /// non arriva proprio dal carosello) e la mappa mostra il suo segnaposto.
   void _seleziona(Object? id, {bool avvicina = false, bool muoviCarosello = true}) {
     setState(() => _selezionata = id);
     if (id == null) return;
-    final indice = _visibili.indexWhere((r) => r['id'] == id);
-    if (muoviCarosello && indice >= 0 && _carosello.hasClients && _carosello.page?.round() != indice) {
-      final d = durata(context, 320);
-      if (d == Duration.zero) {
-        _carosello.jumpToPage(indice);
-      } else {
-        _carosello.animateToPage(indice, duration: d, curve: Curves.easeOutCubic);
-      }
-    }
+    final indice = _ordineCarosello.indexWhere((r) => r['id'] == id);
+    if (muoviCarosello && indice >= 0) unawaited(_portaCaroselloA(indice));
     final r = _items.where((e) => e['id'] == id).firstOrNull;
     final p = r == null ? null : MappaParco.puntoDi(r);
     if (p != null) {
@@ -210,7 +323,7 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
     }
     final adatta = CameraFit.coordinates(
       coordinates: [for (final e in gruppo) e.$2],
-      padding: const EdgeInsets.fromLTRB(56, _altezzaFiltri + 40, 56, _ingombroBasso + 40),
+      padding: EdgeInsets.fromLTRB(56, _altezzaFiltri + 40, 56, _ingombroBasso + 40),
       maxZoom: MappaParco.zoomMassimo,
     ).fit(cam);
     final zoom = math.max(adatta.zoom, cam.zoom + 1).clamp(13, MappaParco.zoomMassimo).toDouble();
@@ -614,10 +727,13 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
     Widget puntino(Color c) => Container(width: 10, height: 10, decoration: BoxDecoration(color: c, shape: BoxShape.circle));
     return PopupMenuButton<String>(
       tooltip: s.t('Filtra per stato', 'Filter by status'),
-      onSelected: (v) => setState(() {
-        _filtroStato = v.isEmpty ? null : v;
-        if (_selezionata != null && !_visibili.any((r) => r['id'] == _selezionata)) _selezionata = null;
-      }),
+      onSelected: (v) {
+        setState(() {
+          _filtroStato = v.isEmpty ? null : v;
+          if (_selezionata != null && !_visibili.any((r) => r['id'] == _selezionata)) _selezionata = null;
+        });
+        _allineaCarosello();
+      },
       itemBuilder: (_) => [
         CheckedPopupMenuItem(
           value: '',
@@ -871,20 +987,27 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
         ]),
       ));
     }
-    return PageView.builder(
+    final ordine = _ordineCarosello;
+    return FadeTransition(
+      opacity: _dissolvenza,
+      child: PageView.builder(
       key: ValueKey('carosello-$_soloMie-$_filtroStato'),
       controller: _carosello,
-      itemCount: visibili.length,
-      onPageChanged: (i) => _seleziona(visibili[i]['id'], muoviCarosello: false),
+      itemCount: ordine.length,
+      // Le schede attraversate mentre il carosello si muove da solo non contano.
+      onPageChanged: (i) {
+        if (!_caroselloGuidato) _seleziona(ordine[i]['id'], muoviCarosello: false);
+      },
       itemBuilder: (_, i) => Padding(
         padding: const EdgeInsets.symmetric(horizontal: 5),
         child: Align(
           alignment: Alignment.bottomCenter,
           child: KeyedSubtree(
-            key: ValueKey('riga-${visibili[i]['id']}'),
-            child: _riga(visibili[i], scelta: visibili[i]['id'] == _selezionata),
+            key: ValueKey('riga-${ordine[i]['id']}'),
+            child: _riga(ordine[i], scelta: ordine[i]['id'] == _selezionata),
           ),
         ),
+      ),
       ),
     );
   }
@@ -897,8 +1020,7 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
         if (MappaParco.puntoDi(r) case final punto?) (r, punto),
     ];
     final mostraNota = !_caricamento && _errore == null && _items.isNotEmpty && conPosizione.isEmpty && !_soloMie;
-    // Altezza delle schede: segue la dimensione del testo scelta sul telefono.
-    final altezzaSchede = 40 + MediaQuery.textScalerOf(context).scale(66);
+    final altezzaSchede = _altezzaSchede;
 
     return Stack(
       fit: StackFit.expand,
