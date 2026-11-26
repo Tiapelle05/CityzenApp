@@ -7,6 +7,24 @@ import 'citizen_api.dart';
 import 'mappa_parco.dart';
 import 'ui.dart';
 
+/// Scorrimento del carosello che si ferma subito. Con la molla predefinita la
+/// scheda impiega quasi un secondo ad assestarsi e nell'ultimo tratto sembra
+/// ferma ma si muove ancora: un tocco allora ferma lo scorrimento invece di
+/// aprire la scheda. Qui la molla è più rigida e lo scorrimento finisce appena
+/// mancano pochi decimi di pixel.
+class SchedeRapide extends ScrollPhysics {
+  const SchedeRapide({super.parent});
+
+  @override
+  SchedeRapide applyTo(ScrollPhysics? ancestor) => SchedeRapide(parent: buildParent(ancestor));
+
+  @override
+  SpringDescription get spring => SpringDescription.withDampingRatio(mass: .5, stiffness: 420, ratio: 1);
+
+  @override
+  Tolerance toleranceFor(ScrollMetrics metrics) => const Tolerance(velocity: 30, distance: .3);
+}
+
 /// Ordina gli elementi seguendo la loro posizione, così due vicini nel
 /// carosello sono vicini anche sulla mappa: si parte da un'estremità del lato
 /// più lungo (ovest o nord) e si va ogni volta al più vicino non ancora preso.
@@ -260,7 +278,7 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
     final mossa = ++_mossaCarosello;
     _caroselloGuidato = true;
     try {
-      final d = durata(context, 320);
+      final d = durata(context, 220);
       if (d == Duration.zero) {
         _carosello.jumpToPage(indice);
       } else if ((indice - attuale).abs() == 1) {
@@ -993,6 +1011,8 @@ class _SchermataSegnalazioniState extends State<SchermataSegnalazioni> with Tick
       child: PageView.builder(
       key: ValueKey('carosello-$_soloMie-$_filtroStato'),
       controller: _carosello,
+      // Sopra il comportamento della piattaforma (bordi fermi su Android).
+      physics: const SchedeRapide().applyTo(ScrollConfiguration.of(context).getScrollPhysics(context)),
       itemCount: ordine.length,
       // Le schede attraversate mentre il carosello si muove da solo non contano.
       onPageChanged: (i) {
