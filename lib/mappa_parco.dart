@@ -78,6 +78,8 @@ class MappaParco extends StatelessWidget {
           urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
           userAgentPackageName: 'it.tryees.app',
           maxNativeZoom: 19,
+          // Col tema scuro la mappa si scurisce invece di restare una macchia bianca.
+          tileBuilder: temaScuro ? darkModeTileBuilder : null,
         ),
         if (marcatori.isNotEmpty) MarkerLayer(markers: marcatori),
         ...livelli,
@@ -109,8 +111,8 @@ class _Attribuzione extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.all(6),
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        decoration: BoxDecoration(color: Colors.white.withValues(alpha: .85), borderRadius: BorderRadius.circular(6)),
-        child: const Text('© OpenStreetMap contributors', style: TextStyle(fontSize: 10, color: testoSecondario)),
+        decoration: BoxDecoration(color: superficie.withValues(alpha: .85), borderRadius: BorderRadius.circular(6)),
+        child: Text('© OpenStreetMap contributors', style: TextStyle(fontSize: 10, color: testoSecondario)),
       ),
     );
   }
@@ -235,7 +237,7 @@ class SegnapostoGruppo extends StatelessWidget {
         ),
         child: Text(
           quanti > 99 ? '99+' : '$quanti',
-          style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w900),
+          style: TextStyle(color: suAccento, fontSize: 15, fontWeight: FontWeight.w900),
         ),
       ),
     );
@@ -309,7 +311,7 @@ class Segnaposto extends StatelessWidget {
             BoxShadow(color: colore.withValues(alpha: .45), blurRadius: selezionato ? 14 : 8, offset: const Offset(0, 3)),
           ],
         ),
-        child: Icon(icona, color: Colors.white, size: selezionato ? 22 : 18),
+        child: Icon(icona, color: suAccento, size: selezionato ? 22 : 18),
       ),
     );
   }
@@ -442,9 +444,9 @@ class _AnteprimaMappaState extends State<AnteprimaMappa> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.place_rounded, size: 16, color: cieloScuro),
+                    Icon(Icons.place_rounded, size: 16, color: cieloScuro),
                     const SizedBox(width: 6),
-                    Text(riepilogo, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: testo)),
+                    Text(riepilogo, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: testo)),
                   ],
                 ),
               ),
@@ -465,10 +467,10 @@ class _AnteprimaMappaState extends State<AnteprimaMappa> {
                     children: [
                       Text(
                         s.t('Apri la mappa', 'Open the map'),
-                        style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: Colors.white),
+                        style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: suAccento),
                       ),
                       const SizedBox(width: 6),
-                      const Icon(Icons.arrow_forward_rounded, size: 17, color: Colors.white),
+                      Icon(Icons.arrow_forward_rounded, size: 17, color: suAccento),
                     ],
                   ),
                 ),

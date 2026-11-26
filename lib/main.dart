@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'ambiente/scheda_aria.dart';
 import 'ambiente/schermata_ambiente.dart';
@@ -30,11 +31,24 @@ Future<void> main() async {
   } catch (_) {
     // L'app resta utilizzabile anche se il backend non è ancora avviato.
   }
-  runApp(const ParkApp());
+  runApp(ParkApp(temaIniziale: await leggiTema()));
+}
+
+/// Chiave del tema scelto nelle preferenze del telefono.
+const String _chiaveTema = 'tema';
+
+Future<ThemeMode> leggiTema() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    return ThemeMode.values.asNameMap()[prefs.getString(_chiaveTema)] ?? ThemeMode.system;
+  } catch (_) {
+    return ThemeMode.system;
+  }
 }
 
 class ParkApp extends StatefulWidget {
-  const ParkApp({super.key});
+  final ThemeMode temaIniziale;
+  const ParkApp({super.key, this.temaIniziale = ThemeMode.system});
 
   @override
   State<ParkApp> createState() => _ParkAppState();
@@ -44,13 +58,63 @@ class TreeyesApp extends ParkApp {
   const TreeyesApp({super.key}) : super();
 }
 
-class _ParkAppState extends State<ParkApp> {
+class _ParkAppState extends State<ParkApp> with WidgetsBindingObserver {
   bool _inglese = false;
   /// Falso finché l'utente non ha scelto un server o la demo: si mostra la pagina di accesso.
   bool _collegato = CitizenApi.instance.configurato;
   /// Cresce a ogni nuovo collegamento: tutte le schermate ricaricano i dati.
   int _sessione = 0;
-  final ThemeData _tema = temaTryees();
+  late ThemeMode _modoTema = widget.temaIniziale;
+  late ThemeData _tema;
+
+  bool get _vuoleScuro =>
+      _modoTema == ThemeMode.dark ||
+      (_modoTema == ThemeMode.system &&
+          WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark);
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    usaTavolozza(_vuoleScuro ? Tavolozza.scuraNotte : Tavolozza.chiara);
+    _tema = temaTryees();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// In «Automatico» il tema segue il telefono anche ad app aperta.
+  @override
+  void didChangePlatformBrightness() => _applicaTema();
+
+  /// Cambia tavolozza se serve e ridisegna tutto. I colori si leggono dalla
+  /// tavolozza mentre ogni widget si costruisce, quindi ogni elemento viene
+  /// ricostruito; lo stato (scheda aperta, chat, moduli) resta com'è.
+  void _applicaTema() {
+    final scuro = _vuoleScuro;
+    if (scuro == temaScuro || !mounted) return;
+    usaTavolozza(scuro ? Tavolozza.scuraNotte : Tavolozza.chiara);
+    void segna(Element e) {
+      e.markNeedsBuild();
+      e.visitChildren(segna);
+    }
+    (context as Element).visitChildren(segna);
+    setState(() => _tema = temaTryees());
+  }
+
+  Future<void> _cambiaTema(ThemeMode modo) async {
+    setState(() => _modoTema = modo);
+    _applicaTema();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_chiaveTema, modo.name);
+    } catch (_) {
+      // Senza preferenze il tema vale fino alla chiusura dell'app.
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -64,6 +128,8 @@ class _ParkAppState extends State<ParkApp> {
               key: ValueKey(_sessione),
               inglese: _inglese,
               onLinguaCambiata: cambiaLingua,
+              tema: _modoTema,
+              onTema: _cambiaTema,
               demo: CitizenApi.instance.demoMode,
               onCambiaCollegamento: () => setState(() => _collegato = false),
               // Demo ⇄ server con un tocco: si ricostruiscono tutte le schermate.
@@ -114,7 +180,7 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
   static const int pInizio = 0, pSegnala = 1, pMappa = 2, pAria = 3, pAssistente = 4;
 
   /// Colore di ogni sezione, nello stesso ordine delle pagine.
-  static const List<Accento> _accenti = [
+  static List<Accento> get _accenti => [
     Accento.verde,
     Accento.arancio,
     Accento.blu,
@@ -264,15 +330,15 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
         backgroundColor: superficie,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(24),
-          side: const BorderSide(color: coralloScuro, width: 2),
+          side: BorderSide(color: coralloScuro, width: 2),
         ),
-        icon: const IconaTonda(Icons.warning_amber_rounded, colore: coralloScuro, sfondo: coralloChiaro, dimensione: 64),
+        icon: IconaTonda(Icons.warning_amber_rounded, colore: coralloScuro, sfondo: coralloChiaro, dimensione: 64),
         title: Semantics(
           liveRegion: true,
           child: Text(
             titolo == null || titolo.isEmpty ? s.t('Pericolo nel parco', 'Danger in the park') : titolo,
             textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900, color: coralloScuro),
+            style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900, color: coralloScuro),
           ),
         ),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -281,7 +347,7 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
             decoration: BoxDecoration(color: coralloChiaro, borderRadius: BorderRadius.circular(12)),
             child: Text(
               s.t('AVVISO DI SICUREZZA', 'SAFETY ALERT'),
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: coralloScuro, letterSpacing: .8),
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: coralloScuro, letterSpacing: .8),
             ),
           ),
           const SizedBox(height: 14),
@@ -290,13 +356,13 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
                 ? s.t('Evita la zona e segui le indicazioni del personale.', 'Avoid the area and follow staff instructions.')
                 : testoAvviso,
             textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 16, height: 1.4, color: testo),
+            style: TextStyle(fontSize: 16, height: 1.4, color: testo),
           ),
           const SizedBox(height: 10),
           Text(
             s.t('In caso di emergenza chiama il 112.', 'In an emergency call 112.'),
             textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: testoSecondario),
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: testoSecondario),
           ),
         ]),
         actionsAlignment: MainAxisAlignment.center,
@@ -425,7 +491,7 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
       onPressed: () => _apriAvvisi(s),
       style: IconButton.styleFrom(
         backgroundColor: superficie,
-        side: const BorderSide(color: bordo),
+        side: BorderSide(color: bordo),
         minimumSize: const Size(40, 40),
         padding: EdgeInsets.zero,
       ),
@@ -556,7 +622,7 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
           builder: (ctx) => IconButton(
             tooltip: s.t('Menu', 'Menu'),
             onPressed: () => Scaffold.of(ctx).openDrawer(),
-            icon: const Icon(Icons.menu_rounded, color: forestaScura),
+            icon: Icon(Icons.menu_rounded, color: forestaScura),
           ),
         ),
         // Marchio su due righe (Treeyes / CITYZEN) che si rimpicciolisce invece di troncarsi.
@@ -564,7 +630,7 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
           children: [
             Image.asset('Assets/logo_treeyes.png', height: 40, semanticLabel: 'Treeyes_Cityzen'),
             const SizedBox(width: 8),
-            const Flexible(
+            Flexible(
               child: FittedBox(
                 fit: BoxFit.scaleDown,
                 alignment: Alignment.centerLeft,
@@ -1179,7 +1245,7 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
         context: context,
         barrierDismissible: false,
         builder: (dialogContext) => AlertDialog(
-          icon: const CircleAvatar(radius: 34, backgroundColor: menta, child: Icon(Icons.check_rounded, color: foresta, size: 40)),
+          icon: CircleAvatar(radius: 34, backgroundColor: menta, child: Icon(Icons.check_rounded, color: foresta, size: 40)),
           title: Text(s.t('Segnalazione inviata', 'Report submitted')),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1187,7 +1253,7 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
               Text(
                 s.t('Grazie! Il tuo aiuto rende il parco un posto migliore.', 'Thank you! Your help makes the park a better place.'),
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: testoSecondario, height: 1.4),
+                style: TextStyle(color: testoSecondario, height: 1.4),
               ),
               const SizedBox(height: 16),
               Container(
@@ -1203,7 +1269,7 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
                     ),
                     if ((result['status_label'] ?? '').toString().isNotEmpty) ...[
                       const SizedBox(height: 4),
-                      Text('${result['status_label']}', style: const TextStyle(color: testoSecondario)),
+                      Text('${result['status_label']}', style: TextStyle(color: testoSecondario)),
                     ],
                   ],
                 ),
@@ -1295,9 +1361,9 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
   Widget _intestazionePassaggio(String titolo, String descrizione) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(titolo, style: const TextStyle(fontSize: 22, height: 1.2, fontWeight: FontWeight.w800, color: testo, letterSpacing: -.3)),
+          Text(titolo, style: TextStyle(fontSize: 22, height: 1.2, fontWeight: FontWeight.w800, color: testo, letterSpacing: -.3)),
           const SizedBox(height: 6),
-          Text(descrizione, style: const TextStyle(fontSize: 15, height: 1.45, color: testoSecondario)),
+          Text(descrizione, style: TextStyle(fontSize: 15, height: 1.45, color: testoSecondario)),
           const SizedBox(height: 18),
         ],
       );
@@ -1307,10 +1373,10 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(testoCampo, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: testo)),
+            Text(testoCampo, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: testo)),
             if (aiuto != null) ...[
               const SizedBox(height: 3),
-              Text(aiuto, style: const TextStyle(fontSize: 13, height: 1.4, color: testoSecondario)),
+              Text(aiuto, style: TextStyle(fontSize: 13, height: 1.4, color: testoSecondario)),
             ],
           ],
         ),
@@ -1322,7 +1388,7 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
     final selezionata = _categoria == categoria.id;
     final nome = s.t(categoria.nomeIt, categoria.nomeEn);
     // Un solo colore, quello di Segnala, e solo sulla voce scelta: le altre restano neutre.
-    const accento = Accento.arancio;
+    final accento = Accento.arancio;
 
     void selezionaCategoria() {
       setState(() {
@@ -1394,7 +1460,7 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
   }
 
   Widget _selettoreGravita(Copie s) {
-    const livelli = [
+    final livelli = [
       ('bassa', 'Bassa', 'Low', foglia),
       ('media', 'Media', 'Medium', sole),
       ('alta', 'Alta', 'High', corallo),
@@ -1517,12 +1583,12 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
   Widget _notaPrivacy(String messaggio) => Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Padding(
+          Padding(
             padding: EdgeInsets.only(top: 1),
             child: Icon(Icons.shield_outlined, size: 17, color: testoTenue),
           ),
           const SizedBox(width: 8),
-          Expanded(child: Text(messaggio, style: const TextStyle(fontSize: 13, height: 1.4, color: testoSecondario))),
+          Expanded(child: Text(messaggio, style: TextStyle(fontSize: 13, height: 1.4, color: testoSecondario))),
         ],
       );
 
@@ -1532,7 +1598,7 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
         children: [
           IconaTonda(icona, colore: accento.forte, sfondo: accento.tinta, dimensione: 40),
           const SizedBox(width: 12),
-          Expanded(child: Text(titolo, style: const TextStyle(fontSize: 16.5, fontWeight: FontWeight.w800, color: testo))),
+          Expanded(child: Text(titolo, style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.w800, color: testo))),
           const SizedBox(width: 8),
           etichetta,
         ],
@@ -1541,7 +1607,7 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
   /// Riquadro grande e toccabile per scegliere la foto: icona sopra, testo sotto
   /// su una sola riga (si rimpicciolisce invece di andare a capo).
   Widget _opzioneFoto(IconData icona, String etichetta, VoidCallback onTap, {bool principale = false}) {
-    final colore = principale ? Colors.white : foresta;
+    final colore = principale ? suAccento : foresta;
     return Semantics(
       button: true,
       label: etichetta,
@@ -1596,7 +1662,7 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
               : _caricamentoGps
                   ? s.t('Sto cercando la tua posizione…', 'Finding your location…')
                   : s.t('Mettiti vicino al problema e tocca il pulsante qui sotto.', 'Stand near the problem and tap the button below.'),
-          style: const TextStyle(fontSize: 14, height: 1.4, color: testoSecondario),
+          style: TextStyle(fontSize: 14, height: 1.4, color: testoSecondario),
         ),
         AnimatedSize(
           duration: durata(context, 300),
@@ -1642,7 +1708,7 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
         Text(
           s.t('Aiuta a capire subito il problema. Inquadra solo quello, senza persone né targhe.',
               'It helps show the problem at a glance. Frame only the problem, without people or number plates.'),
-          style: const TextStyle(fontSize: 14, height: 1.4, color: testoSecondario),
+          style: TextStyle(fontSize: 14, height: 1.4, color: testoSecondario),
         ),
         const SizedBox(height: 14),
         AnimatedSwitcher(
@@ -1754,7 +1820,7 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
               width: 44,
               height: 44,
               alignment: Alignment.topCenter,
-              child: const Icon(
+              child: Icon(
                 Icons.location_on_rounded,
                 size: 44,
                 color: corallo,
@@ -1767,7 +1833,7 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
           const SizedBox(height: 8),
           Text(
             s.t('Demo: tocca la mappa per spostare il punto.', 'Demo: tap the map to move the pin.'),
-            style: const TextStyle(fontSize: 12.5, color: testoSecondario),
+            style: TextStyle(fontSize: 12.5, color: testoSecondario),
           ),
         ],
       ]),
@@ -1776,13 +1842,14 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
 
   // ── Passaggio 3: riepilogo ─────────────────────────────────────────────────
 
-  Widget _rigaRiepilogo(String titolo, String valore, IconData icona, [Accento accento = Accento.verde]) {
+  Widget _rigaRiepilogo(String titolo, String valore, IconData icona, [Accento? scelto]) {
+    final accento = scelto ?? Accento.verde;
     return Row(
       children: [
         IconaTonda(icona, colore: accento.forte, sfondo: accento.tinta, dimensione: 36),
         const SizedBox(width: 12),
         Expanded(
-          child: Text(titolo, style: const TextStyle(fontSize: 14, color: testoSecondario)),
+          child: Text(titolo, style: TextStyle(fontSize: 14, color: testoSecondario)),
         ),
         const SizedBox(width: 8),
         Flexible(
@@ -1790,7 +1857,7 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
           child: Text(
             valore,
             textAlign: TextAlign.end,
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: testo),
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: testo),
           ),
         ),
       ],
@@ -1834,7 +1901,7 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(s.t('La tua segnalazione', 'Your report'), style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: testo)),
+              Text(s.t('La tua segnalazione', 'Your report'), style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: testo)),
               const SizedBox(height: 14),
               _rigaRiepilogo(s.t('Categoria', 'Category'), s.t(categoria.nomeIt, categoria.nomeEn), categoria.icona, Accento.neutro),
               const Divider(height: 22),
@@ -1863,9 +1930,9 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
               ),
               if (_descrizione.text.trim().isNotEmpty) ...[
                 const Divider(height: 22),
-                Text(s.t('Descrizione', 'Description'), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: testoSecondario)),
+                Text(s.t('Descrizione', 'Description'), style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: testoSecondario)),
                 const SizedBox(height: 5),
-                Text(_descrizione.text.trim(), style: const TextStyle(fontSize: 15, height: 1.45, color: testo)),
+                Text(_descrizione.text.trim(), style: TextStyle(fontSize: 15, height: 1.45, color: testo)),
               ],
             ],
           ),
@@ -1898,7 +1965,7 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
           child: FilledButton.icon(
             onPressed: _invioInCorso ? null : _vaiAvanti,
             icon: _invioInCorso
-                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                ? SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: suAccento))
                 : Icon(_passaggio == 2 ? Icons.send_rounded : Icons.arrow_forward_rounded),
             label: Text(
               s.t(
@@ -1908,9 +1975,9 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
             ),
             style: FilledButton.styleFrom(
               backgroundColor: foresta,
-              foregroundColor: Colors.white,
+              foregroundColor: suAccento,
               disabledBackgroundColor: foresta.withValues(alpha: .6),
-              disabledForegroundColor: Colors.white,
+              disabledForegroundColor: suAccento,
               minimumSize: const Size(0, 56),
               textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
             ),
@@ -1937,7 +2004,7 @@ class _SchermataSegnalazioneState extends State<SchermataSegnalazione> {
 
   /// Barra fissa in fondo con Indietro / Continua: non serve scorrere per andare avanti.
   Widget _barraAzioni(Copie s) => DecoratedBox(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           color: sfondo,
           border: Border(top: BorderSide(color: bordo)),
         ),
@@ -2199,22 +2266,22 @@ class _SchermataIdeeState extends State<SchermataIdee> {
       coloreBordo: idea.mine ? sole.withValues(alpha: .45) : null,
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const IconaTonda(Icons.lightbulb_rounded, colore: soleScuro, sfondo: soleChiaro, dimensione: 40),
+          IconaTonda(Icons.lightbulb_rounded, colore: soleScuro, sfondo: soleChiaro, dimensione: 40),
           const SizedBox(width: 12),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(idea.title, style: const TextStyle(fontSize: 16, height: 1.3, fontWeight: FontWeight.w800, color: testo)),
+            Text(idea.title, style: TextStyle(fontSize: 16, height: 1.3, fontWeight: FontWeight.w800, color: testo)),
             if (idea.description.isNotEmpty) ...[
               const SizedBox(height: 5),
-              Text(idea.description, style: const TextStyle(fontSize: 14, height: 1.45, color: testoSecondario)),
+              Text(idea.description, style: TextStyle(fontSize: 14, height: 1.45, color: testoSecondario)),
             ],
           ])),
         ]),
         const SizedBox(height: 14),
         Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, runSpacing: 8, children: [
           Row(mainAxisSize: MainAxisSize.min, children: [
-            const Icon(Icons.schedule_rounded, size: 15, color: testoTenue),
+            Icon(Icons.schedule_rounded, size: 15, color: testoTenue),
             const SizedBox(width: 5),
-            Text([idea.dateLabel, if (idea.categoryLabel != null) idea.categoryLabel!].join(' · '), style: const TextStyle(fontSize: 13, color: testoSecondario)),
+            Text([idea.dateLabel, if (idea.categoryLabel != null) idea.categoryLabel!].join(' · '), style: TextStyle(fontSize: 13, color: testoSecondario)),
           ]),
           Wrap(crossAxisAlignment: WrapCrossAlignment.center, spacing: 6, runSpacing: 6, children: [
             if (idea.mine) Etichetta(s.t('La tua idea', 'Your idea'), icona: Icons.person_rounded),
@@ -2323,7 +2390,7 @@ class _FoglioNuovaIdeaState extends State<_FoglioNuovaIdea> {
     final conferma = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        icon: const IconaTonda(Icons.lightbulb_rounded, colore: soleScuro, sfondo: soleChiaro, dimensione: 56),
+        icon: IconaTonda(Icons.lightbulb_rounded, colore: soleScuro, sfondo: soleChiaro, dimensione: 56),
         title: Text(s.t('Anteprima del suggerimento', 'Suggestion preview')),
         content: SingleChildScrollView(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
           Container(
@@ -2333,16 +2400,16 @@ class _FoglioNuovaIdeaState extends State<_FoglioNuovaIdea> {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(titolo, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, height: 1.3)),
               const SizedBox(height: 6),
-              Text(dettagli, style: const TextStyle(color: testoSecondario, height: 1.4)),
+              Text(dettagli, style: TextStyle(color: testoSecondario, height: 1.4)),
               const SizedBox(height: 10),
               Etichetta('${s.t('Argomento', 'Topic')}: ${_nomeCategoria(_categoria)}', colore: soleScuro, sfondo: soleChiaro),
             ]),
           ),
           const SizedBox(height: 12),
           Row(children: [
-            const Icon(Icons.public_rounded, size: 16, color: testoSecondario),
+            Icon(Icons.public_rounded, size: 16, color: testoSecondario),
             const SizedBox(width: 6),
-            Expanded(child: Text(s.t('Sarà visibile a tutti gli utenti dell’app.', 'It will be visible to all app users.'), style: const TextStyle(color: testoSecondario, fontSize: 13))),
+            Expanded(child: Text(s.t('Sarà visibile a tutti gli utenti dell’app.', 'It will be visible to all app users.'), style: TextStyle(color: testoSecondario, fontSize: 13))),
           ]),
         ])),
         actions: [
@@ -2382,12 +2449,12 @@ class _FoglioNuovaIdeaState extends State<_FoglioNuovaIdea> {
           padding: const EdgeInsets.fromLTRB(22, 0, 22, 22),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
             Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const IconaTonda(Icons.edit_note_rounded, colore: soleScuro, sfondo: soleChiaro, dimensione: 44),
+              IconaTonda(Icons.edit_note_rounded, colore: soleScuro, sfondo: soleChiaro, dimensione: 44),
               const SizedBox(width: 12),
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(s.t('La tua idea', 'Your idea'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: testo)),
+                Text(s.t('La tua idea', 'Your idea'), style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: testo)),
                 const SizedBox(height: 3),
-                Text(s.t('Raccontaci cosa migliorerebbe il parco.', 'Tell us what could make the park better.'), style: const TextStyle(fontSize: 14, height: 1.4, color: testoSecondario)),
+                Text(s.t('Raccontaci cosa migliorerebbe il parco.', 'Tell us what could make the park better.'), style: TextStyle(fontSize: 14, height: 1.4, color: testoSecondario)),
               ])),
             ]),
             const SizedBox(height: 18),
@@ -2395,7 +2462,7 @@ class _FoglioNuovaIdeaState extends State<_FoglioNuovaIdea> {
             const SizedBox(height: 10),
             TextField(controller: widget.dettagli, minLines: 3, maxLines: 4, maxLength: 870, textCapitalization: TextCapitalization.sentences, decoration: InputDecoration(labelText: s.t('Descrizione', 'Description'), hintText: s.t('Descrivi la tua idea in poche parole…', 'Describe your idea in a few words…'), helperText: s.t('Non inserire dati personali.', 'Do not include personal information.'), alignLabelWithHint: true)),
             const SizedBox(height: 14),
-            Text(s.t('Argomento', 'Topic'), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: testo)),
+            Text(s.t('Argomento', 'Topic'), style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: testo)),
             const SizedBox(height: 8),
             Wrap(spacing: 8, runSpacing: 8, children: [
               for (final c in widget.categorie)
@@ -2543,7 +2610,7 @@ class _SchermataAvvisiState extends State<SchermataAvvisi> {
     final importante = avviso.categoria == 'importante';
     return Scheda(
       padding: const EdgeInsets.all(16),
-      colore: importante ? const Color(0xFFFFF7F5) : superficie,
+      colore: importante ? (temaScuro ? coralloChiaro : const Color(0xFFFFF7F5)) : superficie,
       coloreBordo: importante ? corallo.withValues(alpha: .40) : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2562,7 +2629,7 @@ class _SchermataAvvisiState extends State<SchermataAvvisi> {
                     ),
                     if (avviso.data.isNotEmpty) ...[
                       const SizedBox(height: 2),
-                      Text(avviso.data, style: const TextStyle(fontSize: 12.5, color: testoSecondario)),
+                      Text(avviso.data, style: TextStyle(fontSize: 12.5, color: testoSecondario)),
                     ],
                   ],
                 ),
@@ -2573,13 +2640,13 @@ class _SchermataAvvisiState extends State<SchermataAvvisi> {
           const SizedBox(height: 12),
           Text(
             s.t(avviso.titoloIt, avviso.titoloEn),
-            style: const TextStyle(fontSize: 16.5, height: 1.3, fontWeight: FontWeight.w800, color: testo),
+            style: TextStyle(fontSize: 16.5, height: 1.3, fontWeight: FontWeight.w800, color: testo),
           ),
           if (s.t(avviso.descrizioneIt, avviso.descrizioneEn).isNotEmpty) ...[
             const SizedBox(height: 6),
             Text(
               s.t(avviso.descrizioneIt, avviso.descrizioneEn),
-              style: const TextStyle(fontSize: 14.5, height: 1.5, color: testoSecondario),
+              style: TextStyle(fontSize: 14.5, height: 1.5, color: testoSecondario),
             ),
           ],
         ],

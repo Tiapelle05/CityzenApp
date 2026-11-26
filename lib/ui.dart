@@ -6,53 +6,184 @@ import 'package:flutter/material.dart';
 // Palette
 // Un verde foresta come colore dell'app, più quattro accenti caldi e freddi
 // che danno a ogni sezione la sua identità. Le varianti "Scuro" servono per
-// i testi su fondo chiaro, le "Chiaro" per gli sfondi tenui.
+// i testi (sul tema scuro sono più chiare, per leggersi sul fondo), le
+// "Chiaro" per gli sfondi tenui.
+//
+// I colori dipendono dal tema attivo: si leggono dalla [Tavolozza] corrente,
+// che l'app cambia con [usaTavolozza] prima di ricostruire tutto.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const Color foresta = Color(0xFF17694A);
-const Color forestaScura = Color(0xFF0E4532);
-const Color foglia = Color(0xFF2FA36B);
-const Color menta = Color(0xFFE2F3E9);
+class Tavolozza {
+  final bool scura;
+  final Color foresta, forestaScura, foglia, menta;
+  final Color sole, soleScuro, soleChiaro;
+  final Color cielo, cieloScuro, cieloChiaro;
+  final Color corallo, coralloScuro, coralloChiaro;
+  final Color lavanda, lavandaChiaro;
+  final Color acqua, acquaForte, acquaChiaro;
+  final Color sfondo, superficie, testo, testoSecondario, testoTenue, bordo, bordoForte;
+  /// Riempimento dei segnaposto di caricamento.
+  final Color scheletro;
 
-const Color sole = Color(0xFFF0A202);
-const Color soleScuro = Color(0xFF8F5B00);
-const Color soleChiaro = Color(0xFFFFF2D2);
+  const Tavolozza({
+    required this.scura,
+    required this.foresta,
+    required this.forestaScura,
+    required this.foglia,
+    required this.menta,
+    required this.sole,
+    required this.soleScuro,
+    required this.soleChiaro,
+    required this.cielo,
+    required this.cieloScuro,
+    required this.cieloChiaro,
+    required this.corallo,
+    required this.coralloScuro,
+    required this.coralloChiaro,
+    required this.lavanda,
+    required this.lavandaChiaro,
+    required this.acqua,
+    required this.acquaForte,
+    required this.acquaChiaro,
+    required this.sfondo,
+    required this.superficie,
+    required this.testo,
+    required this.testoSecondario,
+    required this.testoTenue,
+    required this.bordo,
+    required this.bordoForte,
+    required this.scheletro,
+  });
 
-const Color cielo = Color(0xFF2C7BE5);
-const Color cieloScuro = Color(0xFF1A5AAE);
-const Color cieloChiaro = Color(0xFFE5EFFC);
+  static const chiara = Tavolozza(
+    scura: false,
+    foresta: Color(0xFF17694A),
+    forestaScura: Color(0xFF0E4532),
+    foglia: Color(0xFF2FA36B),
+    menta: Color(0xFFE2F3E9),
+    sole: Color(0xFFF0A202),
+    soleScuro: Color(0xFF8F5B00),
+    soleChiaro: Color(0xFFFFF2D2),
+    cielo: Color(0xFF2C7BE5),
+    cieloScuro: Color(0xFF1A5AAE),
+    cieloChiaro: Color(0xFFE5EFFC),
+    corallo: Color(0xFFE4572E),
+    coralloScuro: Color(0xFFB42318),
+    coralloChiaro: Color(0xFFFDEBE6),
+    lavanda: Color(0xFF6E52D4),
+    lavandaChiaro: Color(0xFFEEEAFB),
+    acqua: Color(0xFF14A3A3),
+    acquaForte: Color(0xFF0B6E6E),
+    acquaChiaro: Color(0xFFDDF4F2),
+    sfondo: Color(0xFFF4F6F1),
+    superficie: Color(0xFFFFFFFF),
+    testo: Color(0xFF14231A),
+    testoSecondario: Color(0xFF5B6B60),
+    testoTenue: Color(0xFF8A988E),
+    bordo: Color(0xFFE1E8DD),
+    bordoForte: Color(0xFFC9D6C6),
+    scheletro: Color(0xFFE6ECE3),
+  );
 
-const Color corallo = Color(0xFFE4572E);
-const Color coralloScuro = Color(0xFFB42318);
-const Color coralloChiaro = Color(0xFFFDEBE6);
+  /// Fondo verde-nero, superfici appena più chiare; gli accenti restano
+  /// riconoscibili e le loro varianti per i testi diventano chiare.
+  static const scuraNotte = Tavolozza(
+    scura: true,
+    foresta: Color(0xFF2E9A69),
+    forestaScura: Color(0xFFA8E2C4),
+    foglia: Color(0xFF3FBF83),
+    menta: Color(0xFF183A2B),
+    sole: Color(0xFFF0A202),
+    soleScuro: Color(0xFFFFC857),
+    soleChiaro: Color(0xFF3A2E0E),
+    cielo: Color(0xFF4D94F2),
+    cieloScuro: Color(0xFF8EBEFF),
+    cieloChiaro: Color(0xFF132A4A),
+    corallo: Color(0xFFF06B45),
+    coralloScuro: Color(0xFFFF8F75),
+    coralloChiaro: Color(0xFF3E1E17),
+    lavanda: Color(0xFF9C88F2),
+    lavandaChiaro: Color(0xFF2A2452),
+    acqua: Color(0xFF1FB5B5),
+    acquaForte: Color(0xFF6FDCDC),
+    acquaChiaro: Color(0xFF0F3433),
+    sfondo: Color(0xFF0E1511),
+    superficie: Color(0xFF172019),
+    testo: Color(0xFFE6EEE8),
+    testoSecondario: Color(0xFFA4B3A8),
+    testoTenue: Color(0xFF76867B),
+    bordo: Color(0xFF29352C),
+    bordoForte: Color(0xFF3A483E),
+    scheletro: Color(0xFF243027),
+  );
+}
 
-const Color lavanda = Color(0xFF6E52D4);
-const Color lavandaChiaro = Color(0xFFEEEAFB);
+Tavolozza _tavolozza = Tavolozza.chiara;
 
-const Color sfondo = Color(0xFFF4F6F1);
-const Color superficie = Color(0xFFFFFFFF);
-const Color testo = Color(0xFF14231A);
-const Color testoSecondario = Color(0xFF5B6B60);
-const Color testoTenue = Color(0xFF8A988E);
-const Color bordo = Color(0xFFE1E8DD);
-const Color bordoForte = Color(0xFFC9D6C6);
+/// Tavolozza in uso. Cambiarla non ridisegna nulla da sola: l'app la cambia
+/// e subito dopo ricostruisce tutte le schermate.
+Tavolozza get tavolozza => _tavolozza;
+void usaTavolozza(Tavolozza t) => _tavolozza = t;
+
+/// Vero col tema scuro: per i pochi punti che non bastano i colori della tavolozza.
+bool get temaScuro => _tavolozza.scura;
+
+/// Testo e icone sopra un riempimento d'accento (pulsanti pieni, segnaposto,
+/// filtri scelti): bianco sul tema chiaro, scuro sul tema scuro, dove gli
+/// accenti diventano chiari per leggersi sul fondo.
+Color get suAccento => _tavolozza.scura ? const Color(0xFF0E1511) : Colors.white;
+
+Color get foresta => _tavolozza.foresta;
+Color get forestaScura => _tavolozza.forestaScura;
+Color get foglia => _tavolozza.foglia;
+Color get menta => _tavolozza.menta;
+
+Color get sole => _tavolozza.sole;
+Color get soleScuro => _tavolozza.soleScuro;
+Color get soleChiaro => _tavolozza.soleChiaro;
+
+Color get cielo => _tavolozza.cielo;
+Color get cieloScuro => _tavolozza.cieloScuro;
+Color get cieloChiaro => _tavolozza.cieloChiaro;
+
+Color get corallo => _tavolozza.corallo;
+Color get coralloScuro => _tavolozza.coralloScuro;
+Color get coralloChiaro => _tavolozza.coralloChiaro;
+
+Color get lavanda => _tavolozza.lavanda;
+Color get lavandaChiaro => _tavolozza.lavandaChiaro;
+
+Color get sfondo => _tavolozza.sfondo;
+Color get superficie => _tavolozza.superficie;
+Color get testo => _tavolozza.testo;
+Color get testoSecondario => _tavolozza.testoSecondario;
+Color get testoTenue => _tavolozza.testoTenue;
+Color get bordo => _tavolozza.bordo;
+Color get bordoForte => _tavolozza.bordoForte;
 
 /// Terna di colori di un accento: [base] per decorazioni, [forte] per testi e
-/// icone su fondo chiaro, [tinta] per gli sfondi tenui.
+/// icone, [tinta] per gli sfondi tenui.
 class Accento {
   final Color base;
   final Color forte;
   final Color tinta;
   const Accento(this.base, this.forte, this.tinta);
 
-  static const verde = Accento(foglia, foresta, menta);
-  static const arancio = Accento(corallo, coralloScuro, coralloChiaro);
-  static const blu = Accento(cielo, cieloScuro, cieloChiaro);
-  static const giallo = Accento(sole, soleScuro, soleChiaro);
-  static const viola = Accento(lavanda, lavanda, lavandaChiaro);
-  static const acqua = Accento(Color(0xFF14A3A3), Color(0xFF0B6E6E), Color(0xFFDDF4F2));
+  static Accento get verde => Accento(foglia, foresta, menta);
+  static Accento get arancio => Accento(corallo, coralloScuro, coralloChiaro);
+  static Accento get blu => Accento(cielo, cieloScuro, cieloChiaro);
+  static Accento get giallo => Accento(sole, soleScuro, soleChiaro);
+  static Accento get viola => Accento(lavanda, lavanda, lavandaChiaro);
+  static Accento get acqua => Accento(_tavolozza.acqua, _tavolozza.acquaForte, _tavolozza.acquaChiaro);
   /// Grigio, per icone che non devono richiamare una sezione.
-  static const neutro = Accento(testoTenue, testoSecondario, sfondo);
+  static Accento get neutro => Accento(testoTenue, testoSecondario, sfondo);
+
+  @override
+  bool operator ==(Object other) =>
+      other is Accento && other.base == base && other.forte == forte && other.tinta == tinta;
+
+  @override
+  int get hashCode => Object.hash(base, forte, tinta);
 }
 
 /// Durata delle animazioni, azzerata se l'utente le disattiva.
@@ -82,14 +213,18 @@ ThemeData temaTryees() {
     materialTapTargetSize: MaterialTapTargetSize.padded,
     visualDensity: VisualDensity.standard,
     splashFactory: InkSparkle.splashFactory,
+    brightness: temaScuro ? Brightness.dark : Brightness.light,
     colorScheme: ColorScheme.fromSeed(
       seedColor: foresta,
+      brightness: temaScuro ? Brightness.dark : Brightness.light,
       primary: foresta,
+      onPrimary: suAccento,
       secondary: foglia,
       surface: superficie,
+      onSurface: testo,
       error: coralloScuro,
     ),
-    textTheme: ThemeData.light().textTheme.apply(bodyColor: testo, displayColor: testo),
+    textTheme: (temaScuro ? ThemeData.dark() : ThemeData.light()).textTheme.apply(bodyColor: testo, displayColor: testo),
     scaffoldBackgroundColor: sfondo,
     pageTransitionsTheme: const PageTransitionsTheme(builders: {
       TargetPlatform.android: FadeForwardsPageTransitionsBuilder(),
@@ -98,7 +233,7 @@ ThemeData temaTryees() {
       TargetPlatform.windows: FadeForwardsPageTransitionsBuilder(),
       TargetPlatform.linux: FadeForwardsPageTransitionsBuilder(),
     }),
-    appBarTheme: const AppBarTheme(
+    appBarTheme: AppBarTheme(
       backgroundColor: sfondo,
       surfaceTintColor: Colors.transparent,
       foregroundColor: testo,
@@ -106,7 +241,7 @@ ThemeData temaTryees() {
       scrolledUnderElevation: 0,
       centerTitle: false,
     ),
-    navigationBarTheme: const NavigationBarThemeData(
+    navigationBarTheme: NavigationBarThemeData(
       backgroundColor: superficie,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
@@ -124,7 +259,7 @@ ThemeData temaTryees() {
       style: OutlinedButton.styleFrom(
         minimumSize: const Size(0, 50),
         foregroundColor: foresta,
-        side: const BorderSide(color: bordoForte, width: 1.4),
+        side: BorderSide(color: bordoForte, width: 1.4),
         shape: forma,
         textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
       ),
@@ -140,8 +275,8 @@ ThemeData temaTryees() {
         backgroundColor: superficie,
         foregroundColor: testoSecondario,
         selectedBackgroundColor: foresta,
-        selectedForegroundColor: Colors.white,
-        side: const BorderSide(color: bordo, width: 1.2),
+        selectedForegroundColor: suAccento,
+        side: BorderSide(color: bordo, width: 1.2),
         minimumSize: const Size(0, 48),
         textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
       ),
@@ -149,18 +284,18 @@ ThemeData temaTryees() {
     chipTheme: ChipThemeData(
       backgroundColor: superficie,
       selectedColor: menta,
-      side: const BorderSide(color: bordo),
+      side: BorderSide(color: bordo),
       shape: const StadiumBorder(),
-      labelStyle: const TextStyle(fontWeight: FontWeight.w700, color: testo),
+      labelStyle: TextStyle(fontWeight: FontWeight.w700, color: testo),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
     ),
-    cardTheme: const CardThemeData(color: superficie, surfaceTintColor: Colors.transparent),
+    cardTheme: CardThemeData(color: superficie, surfaceTintColor: Colors.transparent),
     dialogTheme: DialogThemeData(
       backgroundColor: superficie,
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
     ),
-    bottomSheetTheme: const BottomSheetThemeData(
+    bottomSheetTheme: BottomSheetThemeData(
       backgroundColor: superficie,
       surfaceTintColor: Colors.transparent,
       showDragHandle: true,
@@ -168,18 +303,18 @@ ThemeData temaTryees() {
     ),
     snackBarTheme: SnackBarThemeData(
       behavior: SnackBarBehavior.floating,
-      backgroundColor: forestaScura,
+      backgroundColor: temaScuro ? const Color(0xFF2A3A30) : forestaScura,
       contentTextStyle: const TextStyle(color: Colors.white, fontSize: 14),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
     ),
-    progressIndicatorTheme: const ProgressIndicatorThemeData(color: foresta),
-    dividerTheme: const DividerThemeData(color: bordo, thickness: 1),
+    progressIndicatorTheme: ProgressIndicatorThemeData(color: foresta),
+    dividerTheme: DividerThemeData(color: bordo, thickness: 1),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: superficie,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
-      labelStyle: const TextStyle(fontSize: 14, color: testoSecondario),
-      hintStyle: const TextStyle(fontSize: 14, color: testoTenue),
+      labelStyle: TextStyle(fontSize: 14, color: testoSecondario),
+      hintStyle: TextStyle(fontSize: 14, color: testoTenue),
       border: campo(bordoForte, 1.2),
       enabledBorder: campo(bordoForte, 1.2),
       focusedBorder: campo(foresta, 2),
@@ -384,7 +519,8 @@ class TitoloPagina extends StatelessWidget {
   final String titolo;
   final String? descrizione;
   final IconData? icona;
-  final Accento accento;
+  final Accento? accentoScelto;
+  Accento get accento => accentoScelto ?? Accento.verde;
   final Widget? azione;
 
   const TitoloPagina({
@@ -392,9 +528,9 @@ class TitoloPagina extends StatelessWidget {
     required this.titolo,
     this.descrizione,
     this.icona,
-    this.accento = Accento.verde,
+    Accento? accento,
     this.azione,
-  });
+  }) : accentoScelto = accento;
 
   /// Altezza fissa dell'intestazione: uguale in ogni scheda, con o senza
   /// descrizione e pulsante, così il contenuto parte sempre alla stessa quota.
@@ -424,7 +560,7 @@ class TitoloPagina extends StatelessWidget {
                       titolo,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: testo,
                         fontSize: 22,
                         height: 1.15,
@@ -438,7 +574,7 @@ class TitoloPagina extends StatelessWidget {
                         descrizione!,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 13.5, color: testoSecondario),
+                        style: TextStyle(fontSize: 13.5, color: testoSecondario),
                       ),
                     ],
                   ],
@@ -456,8 +592,9 @@ class TitoloPagina extends StatelessWidget {
 class TitoloSezione extends StatelessWidget {
   final String titolo;
   final String? dettaglio;
-  final Accento accento;
-  const TitoloSezione(this.titolo, {super.key, this.dettaglio, this.accento = Accento.verde});
+  final Accento? accentoScelto;
+  Accento get accento => accentoScelto ?? Accento.verde;
+  const TitoloSezione(this.titolo, {super.key, this.dettaglio, Accento? accento}) : accentoScelto = accento;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -469,7 +606,7 @@ class TitoloSezione extends StatelessWidget {
                 header: true,
                 child: Text(
                   titolo,
-                  style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: testo, letterSpacing: -.2),
+                  style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: testo, letterSpacing: -.2),
                 ),
               ),
             ),
@@ -482,10 +619,11 @@ class TitoloSezione extends StatelessWidget {
 /// Quadrato arrotondato colorato con icona.
 class IconaTonda extends StatelessWidget {
   final IconData icona;
-  final Color colore;
+  final Color? coloreScelto;
+  Color get colore => coloreScelto ?? foresta;
   final Color? sfondo;
   final double dimensione;
-  const IconaTonda(this.icona, {super.key, this.colore = foresta, this.sfondo, this.dimensione = 44});
+  const IconaTonda(this.icona, {super.key, Color? colore, this.sfondo, this.dimensione = 44}) : coloreScelto = colore;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -504,7 +642,8 @@ class IconaTonda extends StatelessWidget {
 class Scheda extends StatelessWidget {
   final Widget child;
   final EdgeInsets padding;
-  final Color colore;
+  final Color? coloreScelto;
+  Color get colore => coloreScelto ?? superficie;
   final Color? coloreBordo;
   final VoidCallback? onTap;
 
@@ -512,10 +651,10 @@ class Scheda extends StatelessWidget {
     super.key,
     required this.child,
     this.padding = const EdgeInsets.all(18),
-    this.colore = superficie,
+    Color? colore,
     this.coloreBordo,
     this.onTap,
-  });
+  }) : coloreScelto = colore;
 
   @override
   Widget build(BuildContext context) {
@@ -536,7 +675,7 @@ class Scheda extends StatelessWidget {
         shape: RoundedRectangleBorder(
           borderRadius: raggio,
           side: BorderSide(
-            color: alta ? Colors.black : coloreBordo ?? bordo,
+            color: alta ? testo : coloreBordo ?? bordo,
             width: alta ? 1.5 : 1,
           ),
         ),
@@ -550,7 +689,8 @@ class Scheda extends StatelessWidget {
 /// Piccola etichetta a pillola, con puntino o icona opzionali.
 class Etichetta extends StatelessWidget {
   final String testo;
-  final Color colore;
+  final Color? coloreScelto;
+  Color get colore => coloreScelto ?? foresta;
   final Color? sfondo;
   final IconData? icona;
   final bool puntino;
@@ -558,11 +698,11 @@ class Etichetta extends StatelessWidget {
   const Etichetta(
     this.testo, {
     super.key,
-    this.colore = foresta,
+    Color? colore,
     this.sfondo,
     this.icona,
     this.puntino = false,
-  });
+  }) : coloreScelto = colore;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -598,9 +738,10 @@ class Etichetta extends StatelessWidget {
 class Riquadro extends StatelessWidget {
   final IconData icona;
   final String messaggio;
-  final Accento accento;
+  final Accento? accentoScelto;
+  Accento get accento => accentoScelto ?? Accento.verde;
 
-  const Riquadro({super.key, required this.icona, required this.messaggio, this.accento = Accento.verde});
+  const Riquadro({super.key, required this.icona, required this.messaggio, Accento? accento}) : accentoScelto = accento;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -617,7 +758,7 @@ class Riquadro extends StatelessWidget {
             Icon(icona, color: accento.forte, size: 21),
             const SizedBox(width: 11),
             Expanded(
-              child: Text(messaggio, style: const TextStyle(fontSize: 13.5, height: 1.45, color: testo)),
+              child: Text(messaggio, style: TextStyle(fontSize: 13.5, height: 1.45, color: testo)),
             ),
           ],
         ),
@@ -628,7 +769,8 @@ class Riquadro extends StatelessWidget {
 class StatoVuoto extends StatelessWidget {
   final IconData icona;
   final String messaggio;
-  final Accento accento;
+  final Accento? accentoScelto;
+  Accento get accento => accentoScelto ?? Accento.verde;
   final VoidCallback? onAzione;
   final String? etichettaAzione;
 
@@ -636,10 +778,10 @@ class StatoVuoto extends StatelessWidget {
     super.key,
     required this.icona,
     required this.messaggio,
-    this.accento = Accento.verde,
+    Accento? accento,
     this.onAzione,
     this.etichettaAzione,
-  });
+  }) : accentoScelto = accento;
 
   @override
   Widget build(BuildContext context) => Scheda(
@@ -651,7 +793,7 @@ class StatoVuoto extends StatelessWidget {
             Text(
               messaggio,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 14.5, height: 1.45, color: testoSecondario),
+              style: TextStyle(fontSize: 14.5, height: 1.45, color: testoSecondario),
             ),
             if (onAzione != null && etichettaAzione != null) ...[
               const SizedBox(height: 14),
@@ -706,7 +848,7 @@ class _CaricamentoScheletroState extends State<CaricamentoScheletro> with Single
         alignment: Alignment.centerLeft,
         child: Container(
           height: altezza,
-          decoration: BoxDecoration(color: const Color(0xFFE6ECE3), borderRadius: BorderRadius.circular(8)),
+          decoration: BoxDecoration(color: tavolozza.scheletro, borderRadius: BorderRadius.circular(8)),
         ),
       );
 
@@ -730,7 +872,7 @@ class _CaricamentoScheletroState extends State<CaricamentoScheletro> with Single
                             Container(
                               width: 40,
                               height: 40,
-                              decoration: BoxDecoration(color: const Color(0xFFE6ECE3), borderRadius: BorderRadius.circular(13)),
+                              decoration: BoxDecoration(color: tavolozza.scheletro, borderRadius: BorderRadius.circular(13)),
                             ),
                             const SizedBox(width: 12),
                             Expanded(child: _barra(i.isEven ? .7 : .5, 14)),
@@ -754,7 +896,8 @@ class _CaricamentoScheletroState extends State<CaricamentoScheletro> with Single
 class PulsanteAzione extends StatelessWidget {
   final String testo;
   final IconData icona;
-  final Color colore;
+  final Color? coloreScelto;
+  Color get colore => coloreScelto ?? foresta;
   final VoidCallback? onPressed;
   final bool outlined;
 
@@ -762,10 +905,10 @@ class PulsanteAzione extends StatelessWidget {
     super.key,
     required this.testo,
     required this.icona,
-    this.colore = foresta,
+    Color? colore,
     this.onPressed,
     this.outlined = false,
-  });
+  }) : coloreScelto = colore;
 
   @override
   Widget build(BuildContext context) {
@@ -789,7 +932,7 @@ class PulsanteAzione extends StatelessWidget {
               child: contenuto,
             )
           : FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: colore, foregroundColor: Colors.white),
+              style: FilledButton.styleFrom(backgroundColor: colore, foregroundColor: suAccento),
               onPressed: onPressed,
               child: contenuto,
             ),

@@ -117,17 +117,14 @@ class MenuLaterale extends StatelessWidget {
                     segments: [
                       ButtonSegment(
                         value: ThemeMode.light,
-                        icon: const Icon(Icons.light_mode_rounded, size: 18),
                         label: Text(s.t('Chiaro', 'Light')),
                       ),
                       ButtonSegment(
                         value: ThemeMode.dark,
-                        icon: const Icon(Icons.dark_mode_rounded, size: 18),
                         label: Text(s.t('Scuro', 'Dark')),
                       ),
                       ButtonSegment(
                         value: ThemeMode.system,
-                        icon: const Icon(Icons.brightness_auto_rounded, size: 18),
                         label: Text(s.t('Auto', 'Auto')),
                         tooltip: s.t('Come il telefono', 'Same as the phone'),
                       ),
@@ -178,7 +175,7 @@ class MenuLaterale extends StatelessWidget {
         children: [
           Image.asset('Assets/logo_treeyes.png', height: 44, semanticLabel: 'Treeyes_Cityzen'),
           const SizedBox(width: 10),
-          const Column(
+          Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
@@ -218,14 +215,14 @@ class MenuLaterale extends StatelessWidget {
                   children: [
                     Text(
                       demo ? s.t('Modalità demo', 'Demo mode') : s.t('Collegato al server', 'Connected to the server'),
-                      style: const TextStyle(fontSize: 15.5, fontWeight: FontWeight.w800, color: testo),
+                      style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w800, color: testo),
                     ),
                     const SizedBox(height: 1),
                     Text(
                       demo ? s.t('Dati simulati, nulla viene inviato', 'Simulated data, nothing is sent') : server,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 12.5, color: testoSecondario),
+                      style: TextStyle(fontSize: 12.5, color: testoSecondario),
                     ),
                   ],
                 ),
@@ -251,7 +248,7 @@ class MenuLaterale extends StatelessWidget {
                   IconButton(
                     tooltip: s.t('Cambia server', 'Change server'),
                     onPressed: _chiudiE(context, onCambiaServer!),
-                    icon: const Icon(Icons.dns_outlined, color: testoSecondario),
+                    icon: Icon(Icons.dns_outlined, color: testoSecondario),
                   ),
               ],
             ),
@@ -267,7 +264,7 @@ class MenuLaterale extends StatelessWidget {
           header: true,
           child: Text(
             testoTitolo.toUpperCase(),
-            style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: testoSecondario, letterSpacing: 1.1),
+            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: testoSecondario, letterSpacing: 1.1),
           ),
         ),
       );
@@ -297,8 +294,8 @@ class MenuLaterale extends StatelessWidget {
         minTileHeight: 52,
         contentPadding: const EdgeInsets.only(left: 14, right: 10),
         leading: Icon(icona, color: accento?.forte ?? testoSecondario, size: 22),
-        title: Text(etichetta, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: testo)),
-        trailing: coda ?? const Icon(Icons.chevron_right_rounded, color: testoTenue),
+        title: Text(etichetta, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: testo)),
+        trailing: coda ?? Icon(Icons.chevron_right_rounded, color: testoTenue),
       );
 
   /// Riga di impostazione: etichetta e controllo accanto, o sotto se [sotto].
@@ -307,7 +304,7 @@ class MenuLaterale extends StatelessWidget {
       children: [
         Icon(icona, color: testoSecondario, size: 22),
         const SizedBox(width: 16),
-        Expanded(child: Text(etichetta, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: testo))),
+        Expanded(child: Text(etichetta, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: testo))),
         if (!sotto) controllo,
       ],
     );
@@ -335,7 +332,7 @@ class MenuLaterale extends StatelessWidget {
               children: [
                 for (final (i, p) in paragrafi.indexed) ...[
                   if (i > 0) const SizedBox(height: 10),
-                  Text(p, style: const TextStyle(fontSize: 14.5, height: 1.45, color: testo)),
+                  Text(p, style: TextStyle(fontSize: 14.5, height: 1.45, color: testo)),
                 ],
               ],
             ),
@@ -379,7 +376,7 @@ class MenuLaterale extends StatelessWidget {
         children: [
           Text(
             s.t('Mappa © OpenStreetMap contributors.', 'Map © OpenStreetMap contributors.'),
-            style: const TextStyle(fontSize: 13.5, color: testoSecondario),
+            style: TextStyle(fontSize: 13.5, color: testoSecondario),
           ),
         ],
       );

@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_application_1/barra_schede.dart';
 import 'package:flutter_application_1/ui.dart';
 
-const _voci = [
+final _voci = [
   VoceBarra(icona: Icons.home_outlined, iconaScelta: Icons.home_rounded, etichetta: 'A', accento: Accento.verde),
   VoceBarra(icona: Icons.add_outlined, iconaScelta: Icons.add, etichetta: 'B', accento: Accento.arancio),
   VoceBarra(icona: Icons.map_outlined, iconaScelta: Icons.map_rounded, etichetta: 'C', accento: Accento.blu),

@@ -253,7 +253,7 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
               )
             : '$_disclaimer ${s.t('Non scrivere dati personali.', 'Do not write personal data.')}',
         textAlign: TextAlign.center,
-        style: const TextStyle(fontSize: 11.5, height: 1.3, color: testoSecondario),
+        style: TextStyle(fontSize: 11.5, height: 1.3, color: testoSecondario),
       ),
     );
   }
@@ -263,14 +263,14 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
       children: [
-        const Center(
+        Center(
           child: IconaTonda(Icons.park_rounded, colore: lavanda, sfondo: lavandaChiaro, dimensione: 64),
         ),
         const SizedBox(height: 14),
         Text(
           s.t('Ciao, sono $nomeAssistente', 'Hi, I’m $nomeAssistente'),
           textAlign: TextAlign.center,
-          style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w900, color: testo),
+          style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900, color: testo),
         ),
         const SizedBox(height: 4),
         Text(
@@ -279,7 +279,7 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
             'Ask me about the park status, notices, your reports and the air.',
           ),
           textAlign: TextAlign.center,
-          style: const TextStyle(fontSize: 14, color: testoSecondario),
+          style: TextStyle(fontSize: 14, color: testoSecondario),
         ),
         const SizedBox(height: 20),
         Wrap(
@@ -289,7 +289,7 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
           children: [
             for (final (it, en) in _suggerite)
               ActionChip(
-                avatar: const Icon(Icons.chat_bubble_outline_rounded, size: 17, color: cieloScuro),
+                avatar: Icon(Icons.chat_bubble_outline_rounded, size: 17, color: cieloScuro),
                 label: Text(s.t(it, en)),
                 onPressed: _inAttesa ? null : () => _invia(s.t(it, en)),
               ),
@@ -336,7 +336,7 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
             children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   color: lavanda,
                   borderRadius: BorderRadius.only(
                     topLeft: Radius.circular(18),
@@ -348,7 +348,7 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
                 child: Semantics(
                   label: s.t('Tu: ${m.testo}', 'You: ${m.testo}'),
                   excludeSemantics: true,
-                  child: Text(m.testo, style: const TextStyle(fontSize: 15, height: 1.35, color: Colors.white)),
+                  child: Text(m.testo, style: TextStyle(fontSize: 15, height: 1.35, color: suAccento)),
                 ),
               ),
               if (m.errore != null) ...[
@@ -358,12 +358,12 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.error_outline_rounded, size: 16, color: coralloScuro),
+                      Icon(Icons.error_outline_rounded, size: 16, color: coralloScuro),
                       const SizedBox(width: 5),
                       Flexible(
                         child: Text(
                           m.errore!,
-                          style: const TextStyle(fontSize: 13, color: coralloScuro, fontWeight: FontWeight.w700),
+                          style: TextStyle(fontSize: 13, color: coralloScuro, fontWeight: FontWeight.w700),
                         ),
                       ),
                     ],
@@ -394,7 +394,7 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const ExcludeSemantics(
+              ExcludeSemantics(
                 child: IconaTonda(Icons.park_rounded, colore: lavanda, sfondo: lavandaChiaro, dimensione: 32),
               ),
               const SizedBox(width: 8),
@@ -414,7 +414,7 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
                           bottomRight: Radius.circular(18),
                         ),
                       ),
-                      child: SelectableText(m.testo, style: const TextStyle(fontSize: 15, height: 1.4, color: testo)),
+                      child: SelectableText(m.testo, style: TextStyle(fontSize: 15, height: 1.4, color: testo)),
                     ),
                     if (m.fonti.isNotEmpty) ...[
                       const SizedBox(height: 6),
@@ -454,7 +454,7 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
         padding: const EdgeInsets.only(bottom: 12),
         child: Row(
           children: [
-            const IconaTonda(Icons.park_rounded, colore: lavanda, sfondo: lavandaChiaro, dimensione: 32),
+            IconaTonda(Icons.park_rounded, colore: lavanda, sfondo: lavandaChiaro, dimensione: 32),
             const SizedBox(width: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -470,7 +470,7 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
                   const SizedBox(width: 10),
                   Text(
                     s.t('sta scrivendo…', 'typing…'),
-                    style: const TextStyle(fontSize: 14, fontStyle: FontStyle.italic, color: testoSecondario),
+                    style: TextStyle(fontSize: 14, fontStyle: FontStyle.italic, color: testoSecondario),
                   ),
                 ],
               ),
@@ -490,7 +490,7 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
     final s = widget.s;
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: superficie,
         border: Border(top: BorderSide(color: bordo)),
       ),
@@ -539,11 +539,11 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
                           duration: durata(context, 180),
                           transitionBuilder: (figlio, a) => ScaleTransition(scale: a, child: figlio),
                           child: _inAttesa
-                              ? const SizedBox(
+                              ? SizedBox(
                                   key: ValueKey('attesa'),
                                   width: 20,
                                   height: 20,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: suAccento),
                                 )
                               : const Icon(Icons.send_rounded, key: ValueKey('invia')),
                         ),
@@ -630,7 +630,7 @@ class _PuntiniScritturaState extends State<_PuntiniScrittura> with SingleTickerP
         width: 7,
         height: 7,
         margin: const EdgeInsets.symmetric(horizontal: 2),
-        decoration: const BoxDecoration(color: lavanda, shape: BoxShape.circle),
+        decoration: BoxDecoration(color: lavanda, shape: BoxShape.circle),
       ),
     );
   }

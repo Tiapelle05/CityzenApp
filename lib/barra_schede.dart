@@ -171,7 +171,7 @@ class _BarraSchedeState extends State<BarraSchede> with SingleTickerProviderStat
       ),
       child: Material(
         color: superficie,
-        shape: const Border(top: BorderSide(color: bordo)),
+        shape: Border(top: BorderSide(color: bordo)),
         child: SafeArea(
           top: false,
           child: SizedBox(

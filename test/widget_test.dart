@@ -57,4 +57,36 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.byType(SchermataAssistente, skipOffstage: false), findsOneWidget);
   });
+
+  testWidgets('Il tema scuro si sceglie dal menu e non chiude la scheda aperta', (tester) async {
+    CitizenApi.instance.testMode = true;
+    addTearDown(() {
+      CitizenApi.instance.testMode = false;
+      usaTavolozza(Tavolozza.chiara);
+    });
+
+    await tester.pumpWidget(const ParkApp(temaIniziale: ThemeMode.light));
+    await tester.pump();
+    Color fondo() => tester.widget<Scaffold>(find.byType(Scaffold).first).backgroundColor ??
+        Theme.of(tester.element(find.byType(Scaffold).first)).scaffoldBackgroundColor;
+    expect(fondo(), Tavolozza.chiara.sfondo);
+
+    // Si apre la scheda Segnala, poi si cambia tema dal menu.
+    await tester.tap(find.text('Segnala'));
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.tap(find.byTooltip('Menu'));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.ensureVisible(find.text('Scuro'));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.text('Scuro'));
+    await tester.pump(const Duration(seconds: 1));
+    Navigator.of(tester.element(find.text('Scuro'))).pop();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(temaScuro, isTrue);
+    expect(fondo(), Tavolozza.scuraNotte.sfondo);
+    // La scheda aperta resta la stessa e i testi prendono i colori scuri.
+    expect(find.text('Segnala un problema'), findsOneWidget);
+    expect(tester.widget<Text>(find.text('Segnala un problema')).style?.color, Tavolozza.scuraNotte.testo);
+  });
 }

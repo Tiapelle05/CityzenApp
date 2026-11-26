@@ -102,7 +102,7 @@ class _SchermataAccessoState extends State<SchermataAccesso> {
                   const SizedBox(height: 8),
                   Center(child: _logo()),
                   const SizedBox(height: 18),
-                  const Text(
+                  Text(
                     'Treeyes_Cityzen',
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900, color: forestaScura, letterSpacing: -.6),
@@ -111,7 +111,7 @@ class _SchermataAccessoState extends State<SchermataAccesso> {
                   Text(
                     s.t('Segnala i problemi del parco e segui come vengono risolti.', 'Report park problems and follow how they get fixed.'),
                     textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 15, height: 1.45, color: testoSecondario),
+                    style: TextStyle(fontSize: 15, height: 1.45, color: testoSecondario),
                   ),
                   const SizedBox(height: 28),
                   Scheda(
@@ -120,12 +120,12 @@ class _SchermataAccessoState extends State<SchermataAccesso> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Row(children: [
-                          const IconaTonda(Icons.dns_rounded, colore: foresta, sfondo: menta, dimensione: 42),
+                          IconaTonda(Icons.dns_rounded, colore: foresta, sfondo: menta, dimensione: 42),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text(
                               s.t('Collegati al server', 'Connect to the server'),
-                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: testo),
+                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: testo),
                             ),
                           ),
                         ]),
@@ -181,10 +181,10 @@ class _SchermataAccessoState extends State<SchermataAccesso> {
                           child: ExpansionTile(
                             tilePadding: EdgeInsets.zero,
                             childrenPadding: const EdgeInsets.only(bottom: 4),
-                            leading: const Icon(Icons.help_outline_rounded, color: testoSecondario),
+                            leading: Icon(Icons.help_outline_rounded, color: testoSecondario),
                             title: Text(
                               s.t('Come trovo l’indirizzo?', 'How do I find the address?'),
-                              style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, color: testoSecondario),
+                              style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, color: testoSecondario),
                             ),
                             children: [
                               Text(
@@ -202,7 +202,7 @@ class _SchermataAccessoState extends State<SchermataAccesso> {
                                       'On a Wi-Fi network that blocks connections between devices (school, office)? Connect the phone by USB, '
                                       'run “adb reverse tcp:8000 tcp:8000” on the computer and enter 127.0.0.1 here.',
                                 ),
-                                style: const TextStyle(fontSize: 13.5, height: 1.5, color: testoSecondario),
+                                style: TextStyle(fontSize: 13.5, height: 1.5, color: testoSecondario),
                               ),
                             ],
                           ),
@@ -215,7 +215,7 @@ class _SchermataAccessoState extends State<SchermataAccesso> {
                     const Expanded(child: Divider()),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: Text(s.t('oppure', 'or'), style: const TextStyle(color: testoSecondario, fontWeight: FontWeight.w600)),
+                      child: Text(s.t('oppure', 'or'), style: TextStyle(color: testoSecondario, fontWeight: FontWeight.w600)),
                     ),
                     const Expanded(child: Divider()),
                   ]),
@@ -240,7 +240,7 @@ class _SchermataAccessoState extends State<SchermataAccesso> {
                   Text(
                     s.t('Dati simulati del Parco Sempione: nulla viene inviato.', 'Simulated Parco Sempione data: nothing is sent.'),
                     textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 13, color: testoSecondario),
+                    style: TextStyle(fontSize: 13, color: testoSecondario),
                   ),
                 ],
               ),
