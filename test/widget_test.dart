@@ -18,7 +18,7 @@ void main() {
     expect(find.byType(BarraSchede), findsOneWidget);
     expect(find.text('Home'), findsOneWidget);
     expect(find.text('Segnala'), findsOneWidget); // solo nella barra: niente doppioni in Home
-    expect(find.text('Le mie segnalazioni'), findsOneWidget);
+    expect(find.text('Segnalate'), findsOneWidget); // riquadro «numero e parola» delle mie segnalazioni
     expect(find.text('Mappa'), findsOneWidget);
     expect(find.text('Aria'), findsOneWidget);
     // Il nome dell'assistente compare solo nella barra.

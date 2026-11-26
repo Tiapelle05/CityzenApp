@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
@@ -138,6 +139,8 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
   /// Avvisi attivi (per il pallino sulla campanella) e se almeno uno è importante.
   int _avvisiAttivi = 0;
   bool _avvisiUrgenti = false;
+  /// Stesso numero per il riquadro della Home (null finché non si sa).
+  final ValueNotifier<int?> _numeroAvvisi = ValueNotifier(null);
   Timer? _debounceAvvisi;
   late final AnimationController _transizione = AnimationController(
     vsync: this,
@@ -221,6 +224,7 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
         _avvisiAttivi = avvisi.length;
         _avvisiUrgenti = avvisi.any((a) => a['level'] == 'alert');
       });
+      _numeroAvvisi.value = avvisi.length;
     } catch (_) {
       // Senza server la campanella resta senza numero.
     }
@@ -231,6 +235,7 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
     _live?.cancel();
     _debounceAvvisi?.cancel();
     _ambiente.dispose();
+    _numeroAvvisi.dispose();
     _transizione.dispose();
     super.dispose();
   }
@@ -579,6 +584,7 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
             onIdee: () => _apriIdee(s),
             onAvvisi: () => _apriAvvisi(s),
             onMie: () => _apriPagina(context, null, SchermataSegnalazioni(s: s, soloMie: true)),
+            avvisiAttivi: _numeroAvvisi,
           ),
         pSegnala => SchermataSegnalazione(
             s: s,
@@ -766,6 +772,8 @@ class SchermataInizio extends StatefulWidget {
   final StatoAmbiente? ambiente;
   /// Apre le segnalazioni del cittadino.
   final VoidCallback? onMie;
+  /// Numero di avvisi attivi, contato da chi tiene la campanella (null finché non si sa).
+  final ValueListenable<int?>? avvisiAttivi;
 
   const SchermataInizio({
     super.key,
@@ -777,6 +785,7 @@ class SchermataInizio extends StatefulWidget {
     this.onAvvisi,
     this.ambiente,
     this.onMie,
+    this.avvisiAttivi,
   });
 
   @override
@@ -786,10 +795,55 @@ class SchermataInizio extends StatefulWidget {
 class _SchermataInizioState extends State<SchermataInizio> {
   /// Cresce a ogni pull-to-refresh: l'anteprima della mappa si ricarica.
   int _aggiornamenti = 0;
+  /// Numeri dei riquadri (null finché non arrivano o senza server).
+  int? _mie, _idee;
+  StreamSubscription<Map<String, dynamic>>? _live;
+  Timer? _debounce;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_contaRiquadri());
+    _live = CitizenApi.instance.events.listen((e) {
+      final tipo = e['type'];
+      if (tipo == 'report_created' || tipo == 'report_status_changed') {
+        _debounce?.cancel();
+        _debounce = Timer(const Duration(milliseconds: 400), _contaRiquadri);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _live?.cancel();
+    _debounce?.cancel();
+    super.dispose();
+  }
+
+  static int _totale(Map<String, dynamic> dati) =>
+      dati['total'] as int? ?? (dati['items'] as List? ?? const []).length;
+
+  Future<void> _contaRiquadri() async {
+    final api = CitizenApi.instance;
+    final (mie, idee) = await (
+      api.getMyReports(limit: 50).then(_totale).then<int?>((n) => n, onError: (_) => null),
+      api.getFeed(kind: 'suggestion', limit: 50).then(_totale).then<int?>((n) => n, onError: (_) => null),
+    ).wait;
+    if (mounted) setState(() { _mie = mie; _idee = idee; });
+  }
 
   Future<void> _aggiorna() async {
     setState(() => _aggiornamenti++);
-    await widget.ambiente?.ricarica(silenzioso: true);
+    await Future.wait([
+      _contaRiquadri(),
+      if (widget.ambiente case final ambiente?) ambiente.ricarica(silenzioso: true),
+    ]);
+  }
+
+  IconData _iconaOra() {
+    final ora = DateTime.now().hour;
+    if (ora >= 5 && ora < 18) return Icons.wb_sunny_rounded;
+    return Icons.nightlight_round;
   }
 
   void _apriAmbiente() {
@@ -810,46 +864,64 @@ class _SchermataInizioState extends State<SchermataInizio> {
   Widget build(BuildContext context) {
     final s = widget.s;
     final ambiente = widget.ambiente;
+    final avvisi = widget.avvisiAttivi;
     // Segnala e Parky sono già nella barra in basso: qui solo ciò che non c'è.
+    // Tre riquadri uguali: un numero e una parola.
     final scorciatoie = [
       if (widget.onMie != null)
         _ScorciatoiaHome(
           icona: Icons.receipt_long_rounded,
-          etichetta: s.t('Le mie segnalazioni', 'My reports'),
+          numero: _mie,
+          etichetta: s.t('Segnalate', 'Reported'),
+          descrizione: s.t('Le mie segnalazioni', 'My reports'),
           accento: Accento.arancio,
-          piena: true,
           onTap: widget.onMie,
         ),
       _ScorciatoiaHome(
         icona: Icons.lightbulb_rounded,
+        numero: _idee,
         etichetta: s.t('Idee', 'Ideas'),
+        descrizione: s.t('Idee per il parco', 'Ideas for the park'),
         accento: Accento.giallo,
         onTap: widget.onIdee,
       ),
-      _ScorciatoiaHome(
-        icona: Icons.notifications_rounded,
-        etichetta: s.t('Avvisi', 'Notices'),
-        accento: Accento.blu,
-        onTap: widget.onAvvisi,
-      ),
+      if (avvisi == null)
+        _ScorciatoiaHome(
+          icona: Icons.notifications_rounded,
+          etichetta: s.t('Avvisi', 'Notices'),
+          descrizione: s.t('Avvisi del parco', 'Park notices'),
+          accento: Accento.blu,
+          onTap: widget.onAvvisi,
+        )
+      else
+        ValueListenableBuilder<int?>(
+          valueListenable: avvisi,
+          builder: (context, n, _) => _ScorciatoiaHome(
+            icona: Icons.notifications_rounded,
+            numero: n,
+            etichetta: s.t('Avvisi', 'Notices'),
+            descrizione: s.t('Avvisi del parco', 'Park notices'),
+            accento: Accento.blu,
+            onTap: widget.onAvvisi,
+          ),
+        ),
     ];
 
-    // La Home riempie lo schermo: la mappa prende tutto lo spazio che resta.
-    // Su schermi bassi la pagina ha un'altezza minima e scorre.
+    // La Home sta tutta nello schermo e non scorre: la mappa prende lo spazio
+    // che resta. Il trascinamento verso il basso aggiorna senza muovere la pagina.
     return RefreshIndicator(
       onRefresh: _aggiorna,
-      child: LayoutBuilder(
-        builder: (context, vincoli) {
-          final stretto = vincoli.maxWidth < 380;
-          return SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+      child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
+        slivers: [
+          SliverFillRemaining(
             child: Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 760),
                 child: SizedBox(
-                  height: vincoli.maxHeight < 600 ? 600 : vincoli.maxHeight,
+                  height: double.infinity,
                   child: Padding(
-                    padding: EdgeInsets.fromLTRB(stretto ? 16 : 20, 4, stretto ? 16 : 20, 16),
+                    padding: const EdgeInsets.fromLTRB(margineLaterale, 0, margineLaterale, 16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
@@ -857,6 +929,7 @@ class _SchermataInizioState extends State<SchermataInizio> {
                           child: TitoloPagina(
                             titolo: _saluto(s),
                             descrizione: s.t('Ecco il parco in questo momento', 'Here is the park right now'),
+                            icona: _iconaOra(),
                           ),
                         ),
                         if (ambiente != null) BannerAllerteAmbiente(stato: ambiente, s: s, onApri: _apriAmbiente),
@@ -902,27 +975,32 @@ class _SchermataInizioState extends State<SchermataInizio> {
                 ),
               ),
             ),
-          );
-        },
+          ),
+        ],
       ),
     );
   }
 }
 
-/// Scorciatoia quadrata della Home: icona e una parola.
+/// Riquadro della Home: icona piccola in alto, un numero grande e una parola.
+/// Tutti uguali, così restano allineati qualunque sia la lingua.
 class _ScorciatoiaHome extends StatelessWidget {
   final IconData icona;
+  /// Numero da mostrare; null finché non si conosce (si vede un trattino).
+  final int? numero;
   final String etichetta;
+  /// Nome completo per i lettori di schermo.
+  final String descrizione;
   final Accento accento;
   final VoidCallback? onTap;
-  final bool piena;
 
   const _ScorciatoiaHome({
     required this.icona,
+    this.numero,
     required this.etichetta,
+    required this.descrizione,
     required this.accento,
     required this.onTap,
-    this.piena = false,
   });
 
   @override
@@ -930,48 +1008,65 @@ class _ScorciatoiaHome extends StatelessWidget {
     final raggio = BorderRadius.circular(20);
     return Semantics(
       button: true,
-      label: etichetta,
+      label: numero == null ? descrizione : '$descrizione: $numero',
       onTap: onTap,
       excludeSemantics: true,
       child: Premibile(
         attivo: onTap != null,
         scala: .95,
         child: Material(
-        color: piena ? accento.base : accento.tinta,
-        shape: RoundedRectangleBorder(
-          borderRadius: raggio,
-          side: piena ? BorderSide.none : BorderSide(color: accento.base.withValues(alpha: .22)),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          child: SizedBox(
-            height: 78,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(icona, size: 26, color: piena ? Colors.white : accento.forte),
-                  const SizedBox(height: 6),
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
+          color: accento.tinta,
+          shape: RoundedRectangleBorder(
+            borderRadius: raggio,
+            side: BorderSide(color: accento.base.withValues(alpha: .22)),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onTap,
+            child: SizedBox(
+              height: 84,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: AnimatedSwitcher(
+                            duration: durata(context, 220),
+                            transitionBuilder: (figlio, anim) => FadeTransition(opacity: anim, child: figlio),
+                            layoutBuilder: (corrente, precedenti) =>
+                                Stack(alignment: Alignment.centerLeft, children: [...precedenti, ?corrente]),
+                            child: Text(
+                              numero?.toString() ?? '–',
+                              key: ValueKey(numero),
+                              maxLines: 1,
+                              style: TextStyle(
+                                fontSize: 26,
+                                height: 1.1,
+                                fontWeight: FontWeight.w900,
+                                color: accento.forte,
+                                fontFeatures: const [FontFeature.tabularFigures()],
+                              ),
+                            ),
+                          ),
+                        ),
+                        Icon(icona, size: 20, color: accento.forte.withValues(alpha: .75)),
+                      ],
+                    ),
+                    const Spacer(),
+                    Text(
                       etichetta,
                       maxLines: 1,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                        color: piena ? Colors.white : accento.forte,
-                      ),
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800, color: accento.forte),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
-        ),
         ),
       ),
     );
