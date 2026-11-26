@@ -314,10 +314,13 @@ class AssistantSource {
   final int? id, parkId, stationId;
   final String? metric;
 
+  /// Nome da mostrare, se il backend lo manda (chiave "label").
+  final String? label;
+
   /// Chiavi JSON "from" e "to".
   final DateTime? from, to;
 
-  const AssistantSource({required this.type, this.id, this.parkId, this.stationId, this.metric, this.from, this.to});
+  const AssistantSource({required this.type, this.id, this.parkId, this.stationId, this.metric, this.label, this.from, this.to});
 
   factory AssistantSource.fromJson(Map<String, dynamic> j) => AssistantSource(
     type: j['type'] as String? ?? '',
@@ -325,6 +328,7 @@ class AssistantSource {
     parkId: _int(j['park_id']),
     stationId: _int(j['station_id']),
     metric: j['metric'] as String?,
+    label: j['label'] as String?,
     from: _data(j['from']),
     to: _data(j['to']),
   );

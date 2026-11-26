@@ -534,7 +534,7 @@ class _NavigazionePrincipaleState extends State<NavigazionePrincipale>
           ),
         pMappa => SchermataSegnalazioni(key: ValueKey('mappa-$_invii'), s: s, soloMie: _mappaMie),
         pAria => SchermataAmbiente(stato: _ambiente, s: s, incorporata: true),
-        _ => SchermataAssistente(s: s, incorporata: true, onFonte: (ctx, fonte) => _apriFonte(ctx, fonte, s)),
+        _ => SchermataAssistente(s: s, incorporata: true, ambiente: _ambiente, onFonte: (ctx, fonte) => _apriFonte(ctx, fonte, s)),
       };
 
   /// Le cinque schede: quelle mai aperte sono segnaposto vuoti.

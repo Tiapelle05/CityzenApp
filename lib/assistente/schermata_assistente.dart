@@ -4,10 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 
+import '../ambiente/stato_ambiente.dart';
 import '../api/treeyes_api.dart';
 import '../citizen_api.dart';
 import '../modelli/ambiente.dart';
 import '../ui.dart';
+import 'nomi_fonti.dart';
 
 /// Nome dell'assistente del parco, mostrato nella barra in basso, nella Home e nella chat.
 const String nomeAssistente = 'Parky';
@@ -48,7 +50,10 @@ class SchermataAssistente extends StatefulWidget {
   /// Vero quando la chat è una scheda della barra in basso: niente AppBar propria.
   final bool incorporata;
 
-  const SchermataAssistente({super.key, required this.s, this.onFonte, this.incorporata = false});
+  /// Dati ambientali, per dare ai link dei grafici il nome della grandezza e della stazione.
+  final StatoAmbiente? ambiente;
+
+  const SchermataAssistente({super.key, required this.s, this.onFonte, this.incorporata = false, this.ambiente});
 
   @override
   State<SchermataAssistente> createState() => _SchermataAssistenteState();
@@ -61,6 +66,7 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
   final FocusNode _focus = FocusNode();
   bool _inAttesa = false;
   String? _disclaimer;
+  late final NomiFonti _nomi = NomiFonti(ambiente: widget.ambiente);
 
   static const List<(String, String)> _suggerite = [
     ('Com’è l’aria adesso?', 'How is the air right now?'),
@@ -113,6 +119,8 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
     try {
       final api = CitizenApi.instance;
       final risposta = await api.treeyes.askAssistant(await api.parcoInUso(), domanda.testo, _cronologiaPrima(domanda));
+      // I nomi dei link arrivano prima della risposta, così non cambiano sotto gli occhi.
+      await _nomi.prepara(risposta.sources).timeout(const Duration(seconds: 3), onTimeout: () {});
       if (!mounted) return;
       setState(() {
         _disclaimer ??= risposta.disclaimer.isEmpty ? null : risposta.disclaimer;
@@ -422,8 +430,7 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
                         spacing: 6,
                         runSpacing: 6,
                         children: [
-                          for (final f in m.fonti)
-                            if (_etichettaFonte(f, s) case final etichetta?)
+                          for (final (f, etichetta) in _nomi.etichette(m.fonti, s))
                               ActionChip(
                                 visualDensity: VisualDensity.compact,
                                 avatar: Icon(_iconaFonte(f.type), size: 16, color: lavanda),
@@ -568,17 +575,6 @@ class _SchermataAssistenteState extends State<SchermataAssistente> {
     TipiFonte.ambiente => Icons.air_rounded,
     TipiFonte.categorie => Icons.add_location_alt_rounded,
     _ => Icons.link_rounded,
-  };
-
-  /// Etichetta del chip; null per i tipi che l'app non sa aprire.
-  static String? _etichettaFonte(AssistantSource f, Copie s) => switch (f.type) {
-    TipiFonte.statoParco => s.t('Stato del parco', 'Park status'),
-    TipiFonte.avviso => s.t('Avviso', 'Notice'),
-    TipiFonte.miaSegnalazione => s.t('La tua segnalazione', 'Your report'),
-    TipiFonte.segnalazione => s.t('Segnalazione', 'Report'),
-    TipiFonte.ambiente => f.metric == null ? s.t('Dati ambientali', 'Environmental data') : s.t('Grafico', 'Chart'),
-    TipiFonte.categorie => s.t('Segnala', 'Report'),
-    _ => null,
   };
 }
 
